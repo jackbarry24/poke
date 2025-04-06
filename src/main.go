@@ -12,7 +12,7 @@ func main() {
 	data := flag.String("d", "", "Request body payload")
 	headers := flag.String("H", "", "Request headers (key:value)")
 	verbose := flag.Bool("v", false, "Verbose output")
-	editor := flag.Bool("editor", false, "Open payload in editor")
+	editor := flag.Bool("edit", false, "Open payload in editor")
 	savePath := flag.String("save", "", "Save request to file")
 	sendPath := flag.String("send", "", "Send request from file")
 	flag.Parse()
