@@ -84,17 +84,20 @@ func main() {
 		}
 	}
 
+	if *userAgent != "" {
+		req.Headers["User-Agent"] = *userAgent
+	}
+
 	if *savePath != "" {
-		err := saveRequest(resolveRequestPath(*savePath), req)
+		err := saveRequest(resolveRequestPath(*savePath), req, *data)
 		if err != nil {
 			Error("Failed to save request", err)
 		}
 		fmt.Printf("Request saved to %s\n", *savePath)
-		os.Exit(0)
 	}
 
 	start := time.Now()
-	resp, err := SendRequest(req.Method, req.URL, req.Headers, req.Body)
+	resp, err := SendRequest(*req)
 	duration := time.Since(start)
 
 	if err != nil {

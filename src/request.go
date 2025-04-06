@@ -5,16 +5,16 @@ import (
 	"net/http"
 )
 
-func SendRequest(method, url string, headers map[string]string, data string) (*http.Response, error) {
+func SendRequest(req SavedRequest) (*http.Response, error) {
 	client := &http.Client{}
-	req, err := http.NewRequest(method, url, bytes.NewBufferString(data))
+	request, err := http.NewRequest(req.Method, req.URL, bytes.NewBufferString(req.Body))
 	if err != nil {
 		return nil, err
 	}
 
-	for k, v := range headers {
-		req.Header.Set(k, v)
+	for k, v := range req.Headers {
+		request.Header.Set(k, v)
 	}
 
-	return client.Do(req)
+	return client.Do(request)
 }

@@ -15,12 +15,23 @@ import (
 )
 
 
-func saveRequest(path string, req *SavedRequest) error {
-	data, err := json.MarshalIndent(req, "", "  ")
+func saveRequest(path string, req *SavedRequest, data string) error {
+	originalBody := req.Body
+	defer func() { req.Body = originalBody }() 
+
+	// If the data starts with '@', treat it as a file path
+	// save the file path in the saved request not the content
+	// this allows us to edit the file later
+	if strings.HasPrefix(data, "@") {
+		req.Body = data
+	}
+
+	buffer, err := json.MarshalIndent(req, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+
+	return os.WriteFile(path, buffer, 0644)
 }
 
 func loadSavedRequest(path string) (*SavedRequest, error) {
