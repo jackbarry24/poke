@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-func SendRequest(req SavedRequest) (*http.Response, error) {
+func SendRequest(req PokeRequest) (*http.Response, error) {
 	client := &http.Client{}
 	request, err := http.NewRequest(req.Method, req.URL, bytes.NewBufferString(req.Body))
 	if err != nil {

@@ -1,23 +1,20 @@
 package main
 
 import (
-	// "io"
-	// "net/http"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
-	"io"
 
 	"github.com/TylerBrock/colorjson"
 	"github.com/fatih/color"
 )
 
-
-func saveRequest(path string, req *SavedRequest, data string) error {
+func saveRequest(path string, req *PokeRequest, data string) error {
 	originalBody := req.Body
-	defer func() { req.Body = originalBody }() 
+	defer func() { req.Body = originalBody }()
 
 	// If the data starts with '@', treat it as a file path
 	// save the file path in the saved request not the content
@@ -34,12 +31,12 @@ func saveRequest(path string, req *SavedRequest, data string) error {
 	return os.WriteFile(path, buffer, 0644)
 }
 
-func loadSavedRequest(path string) (*SavedRequest, error) {
+func loadRequest(path string) (*PokeRequest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var req SavedRequest
+	var req PokeRequest
 	err = json.Unmarshal(data, &req)
 	if err != nil {
 		return nil, err
@@ -183,7 +180,7 @@ func openEditorWithContent(initial string) (string, error) {
 func Error(msg string, err error) {
 	if err == nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", msg)
-	} else {	
+	} else {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", msg, err)
 	}
 	os.Exit(1)

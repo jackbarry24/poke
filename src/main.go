@@ -23,6 +23,9 @@ func main() {
 	verbose := flag.Bool("v", false, "Verbose output")
 	flag.BoolVar(verbose, "verbose", false, "Verbose output")
 
+	repeat := flag.Int("repeat", 1, "Number of times to send the request (across all workers)")
+	workers := flag.Int("workers", 1, "Number of concurrent workers")
+	expectStatus := flag.Int("expect-status", 0, "Expected status code")
 	editor := flag.Bool("edit", false, "Open payload in editor")
 	savePath := flag.String("save", "", "Save request to file")
 	sendPath := flag.String("send", "", "Send request from file")
@@ -32,12 +35,16 @@ func main() {
 		Error("Cannot use both -save and -send options at the same time", nil)
 	}
 
-	var req *SavedRequest
+	if *repeat < 1 || *workers < 1 {
+		Error("Repeat and workers must be greater than 0", nil)
+	}
+
+	var req *PokeRequest
 
 	if *sendPath != "" {
 		// Load the request from the specified file
 		filepath := resolveRequestPath(*sendPath)
-		loaded, err := loadSavedRequest(filepath)
+		loaded, err := loadRequest(filepath)
 		if err != nil {
 			Error("Failed to load request from file", err)
 		}
@@ -54,6 +61,15 @@ func main() {
 		}
 		if *headers != "" {
 			mergeHeaders(req.Headers, parseHeaders(*headers))
+		}
+		if *workers > 0 {
+			req.Workers = *workers
+		}
+		if *repeat > 1 {
+			req.Repeat = *repeat
+		}
+		if *expectStatus > 0 {
+			req.ExpectStatus = *expectStatus
 		}
 		if *editor {
 			// if -d is set, use that as the payload
@@ -75,12 +91,15 @@ func main() {
 		headersMap := parseHeaders(*headers)
 		body := resolvePayload(*data, *editor)
 
-		req = &SavedRequest{
-			Method:    *method,
-			URL:       url,
-			Headers:   headersMap,
-			Body:      body,
-			CreatedAt: time.Now(),
+		req = &PokeRequest{
+			Method:       *method,
+			URL:          url,
+			Headers:      headersMap,
+			Body:         body,
+			CreatedAt:    time.Now(),
+			Workers:      *workers,
+			Repeat:       *repeat,
+			ExpectStatus: *expectStatus,
 		}
 	}
 
@@ -94,6 +113,14 @@ func main() {
 			Error("Failed to save request", err)
 		}
 		fmt.Printf("Request saved to %s\n", *savePath)
+	}
+
+	if req.Repeat > 1 {
+		if req.Workers > req.Repeat {
+			req.Workers = req.Repeat
+		}
+		RunBenchmark(req, req.Repeat, req.Workers, req.ExpectStatus)
+		return
 	}
 
 	start := time.Now()
