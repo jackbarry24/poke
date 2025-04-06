@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/TylerBrock/colorjson"
 	"github.com/fatih/color"
 )
 
@@ -105,23 +104,6 @@ func colorStatus(code int) string {
 		return color.New(color.FgRed).Sprintf("%d Error", code)
 	default:
 		return fmt.Sprintf("%d", code)
-	}
-}
-
-func printBody(body []byte, contentType string) {
-	if strings.Contains(contentType, "application/json") {
-		var obj interface{}
-		err := json.Unmarshal(body, &obj)
-		if err != nil {
-			fmt.Println(string(body)) // fallback raw
-			return
-		}
-		f := colorjson.NewFormatter()
-		f.Indent = 2
-		s, _ := f.Marshal(obj)
-		fmt.Println(string(s))
-	} else {
-		fmt.Println(string(body))
 	}
 }
 

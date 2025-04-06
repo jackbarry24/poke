@@ -1,11 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/TylerBrock/colorjson"
 )
 
 func readResponse(resp *http.Response) []byte {
@@ -38,4 +41,21 @@ func printResponseVerbose(resp *http.Response, req *PokeRequest, body []byte, du
 	fmt.Println("──────────────────────Response Body──────────────────────")
 
 	printBody(body, resp.Header.Get("Content-Type"))
+}
+
+func printBody(body []byte, contentType string) {
+	if strings.Contains(contentType, "application/json") {
+		var obj interface{}
+		err := json.Unmarshal(body, &obj)
+		if err != nil {
+			fmt.Println(string(body)) // fallback raw
+			return
+		}
+		f := colorjson.NewFormatter()
+		f.Indent = 2
+		s, _ := f.Marshal(obj)
+		fmt.Println(string(s))
+	} else {
+		fmt.Println(string(body))
+	}
 }
