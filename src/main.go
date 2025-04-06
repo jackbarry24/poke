@@ -44,15 +44,25 @@ func main() {
 		req = loaded
 
 		// Overwrite the URL/headers/body if specified
-		// don't allow overwriting method
 		if len(flag.Args()) > 0 {
 			req.URL = flag.Args()[0]
+		}
+		// don't overwrite the method if it is set to GET
+		// since -X flag defaults to GET, it will always overwrite
+		if flag.Lookup("X").Value.String() != "GET" {
+			req.Method = *method
 		}
 		if *headers != "" {
 			mergeHeaders(req.Headers, parseHeaders(*headers))
 		}
-		if *data != "" || *editor {
-			req.Body = resolvePayload(*data, *editor)
+		if *editor {
+			// if -d is set, use that as the payload
+			// otherwise, use the existing payload from the saved request
+			if *data != "" {
+				req.Body = resolvePayload(*data, *editor)
+			} else {
+				req.Body = resolvePayload(req.Body, *editor)
+			}
 		}
 	} else {
 		// Build request from flags
