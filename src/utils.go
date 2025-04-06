@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/TylerBrock/colorjson"
@@ -44,13 +44,32 @@ func loadRequest(path string) (*PokeRequest, error) {
 
 	if strings.HasPrefix(req.Body, "@") {
 		payloadPath := strings.TrimPrefix(req.Body, "@")
-		contents, err := os.ReadFile(payloadPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read payload file: %v", err)
+		if payloadPath == "-" {
+			req.Body = "@-"
+		} else {
+			contents, err := os.ReadFile(payloadPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read payload file: %v", err)
+			}
+			req.Body = string(contents)
 		}
-		req.Body = string(contents)
 	}
 	return &req, nil
+}
+
+func resolveRequestPath(input string) string {
+	if strings.Contains(input, "/") {
+		return input
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return input
+	}
+
+	dir := filepath.Join(home, ".poke", "requests")
+	os.MkdirAll(dir, 0755)
+	return filepath.Join(dir, input)
 }
 
 func mergeHeaders(base map[string]string, newHeaders map[string]string) {
@@ -141,40 +160,6 @@ func resolvePayload(data string, editor bool) string {
 	}
 
 	return prefill
-}
-
-func openEditorWithContent(initial string) (string, error) {
-	tmpfile, err := os.CreateTemp("", "poke_edit_*.tmp")
-	if err != nil {
-		return "", err
-	}
-	defer os.Remove(tmpfile.Name())
-
-	if initial != "" {
-		tmpfile.WriteString(initial)
-		tmpfile.Sync()
-	}
-
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "vim"
-	}
-
-	cmd := exec.Command(editor, tmpfile.Name())
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return "", err
-	}
-
-	editedContent, err := os.ReadFile(tmpfile.Name())
-	if err != nil {
-		return "", err
-	}
-
-	return strings.TrimSpace(string(editedContent)), nil
 }
 
 func Error(msg string, err error) {

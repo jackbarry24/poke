@@ -32,7 +32,7 @@ func main() {
 	flag.Parse()
 
 	if *savePath != "" && *sendPath != "" {
-		Error("Cannot use both -save and -send options at the same time", nil)
+		Error("Cannot use both --save and --send options at the same time", nil)
 	}
 
 	if *repeat < 1 || *workers < 1 {
@@ -119,7 +119,7 @@ func main() {
 		if req.Workers > req.Repeat {
 			req.Workers = req.Repeat
 		}
-		RunBenchmark(req, req.Repeat, req.Workers, req.ExpectStatus)
+		RunBenchmark(req, req.Repeat, req.Workers, req.ExpectStatus, *verbose)
 		return
 	}
 
@@ -132,19 +132,15 @@ func main() {
 	}
 	defer resp.Body.Close()
 
-	bodyBytes := readResponse(resp)
-	status := colorStatus(resp.StatusCode)
-
-	fmt.Printf("[Status: %s]\n\n", status)
-
-	if *verbose {
-		fmt.Printf("URL: %s\n", req.URL)
-		fmt.Printf("Method: %s\n", req.Method)
-		fmt.Printf("Duration: %v\n", duration)
-		fmt.Printf("Request Size: %d bytes\n", len(req.Body))
-		fmt.Printf("Response Size: %d bytes\n", len(bodyBytes))
-		fmt.Printf("Content-Type: %s\n\n", resp.Header.Get("Content-Type"))
+	if req.ExpectStatus != 0 && resp.StatusCode != req.ExpectStatus {
+		Error("Unexpected status code", fmt.Errorf("expected %d, got %d", req.ExpectStatus, resp.StatusCode))
 	}
 
-	printBody(bodyBytes, resp.Header.Get("Content-Type"))
+	bodyBytes := readResponse(resp)
+	if *verbose {
+		printResponseVerbose(resp, req, bodyBytes, duration)
+	} else {
+		fmt.Printf("%s\n\n", colorStatus(resp.StatusCode))
+		printBody(bodyBytes, resp.Header.Get("Content-Type"))
+	}
 }
