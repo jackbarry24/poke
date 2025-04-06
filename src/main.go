@@ -9,9 +9,20 @@ import (
 
 func main() {
 	method := flag.String("X", "GET", "HTTP method to use")
+	flag.StringVar(method, "method", "GET", "HTTP method to use")
+
 	data := flag.String("d", "", "Request body payload")
+	flag.StringVar(data, "data", "", "Request body payload")
+
+	userAgent := flag.String("A", "poke/1.0", "Set the User-Agent header")
+	flag.StringVar(userAgent, "user-agent", "poke/1.0", "Set the User-Agent header")
+
 	headers := flag.String("H", "", "Request headers (key:value)")
+	flag.StringVar(headers, "headers", "", "Request headers (key:value)")
+
 	verbose := flag.Bool("v", false, "Verbose output")
+	flag.BoolVar(verbose, "verbose", false, "Verbose output")
+
 	editor := flag.Bool("edit", false, "Open payload in editor")
 	savePath := flag.String("save", "", "Save request to file")
 	sendPath := flag.String("send", "", "Send request from file")
