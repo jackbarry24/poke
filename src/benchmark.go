@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,7 +14,7 @@ type BenchmarkResult struct {
 	Durations []time.Duration
 }
 
-func RunBenchmark(req *PokeRequest, repeat int, workers int, expectStatus int) BenchmarkResult {
+func RunBenchmark(req *PokeRequest, repeat int, workers int, expectStatus int, verbose bool) BenchmarkResult {
 	var wg sync.WaitGroup
 	resultChan := make(chan time.Duration, repeat)
 	errorChan := make(chan bool, repeat)
@@ -23,6 +24,8 @@ func RunBenchmark(req *PokeRequest, repeat int, workers int, expectStatus int) B
 	// Calculate the base workload per worker and the remainder
 	baseWorkload := repeat / workers
 	remainder := repeat % workers
+
+	var requestCounter int64
 
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
@@ -37,6 +40,12 @@ func RunBenchmark(req *PokeRequest, repeat int, workers int, expectStatus int) B
 				t0 := time.Now()
 				resp, err := SendRequest(*req)
 				duration := time.Since(t0)
+
+				reqNum := atomic.AddInt64(&requestCounter, 1)
+				if verbose {
+					status := colorStatus(resp.StatusCode)
+					fmt.Printf("Request %-3d [Worker %-2d]: %-7s (%v)\n", reqNum, workerIndex, status, duration)
+				}
 
 				if err != nil {
 					errorChan <- true
@@ -80,12 +89,15 @@ func RunBenchmark(req *PokeRequest, repeat int, workers int, expectStatus int) B
 		Failures:  failures,
 		Durations: durations,
 	}
-	printBenchmarkResults(res, totalTime)
+	printBenchmarkResults(res, totalTime, req)
 	return res
 }
 
-func printBenchmarkResults(res BenchmarkResult, totalTime time.Duration) {
+func printBenchmarkResults(res BenchmarkResult, totalTime time.Duration, req *PokeRequest) {
 	fmt.Println()
+	fmt.Println("===================================")
+	fmt.Println("       --- Poke Benchmark ---      ")
+	fmt.Println("===================================")
 	fmt.Printf("Requests:      %d\n", res.Total)
 	fmt.Printf("Success:       %d\n", res.Successes)
 	fmt.Printf("Failures:      %d\n", res.Failures)
@@ -114,4 +126,6 @@ func printBenchmarkResults(res BenchmarkResult, totalTime time.Duration) {
 
 	throughput := float64(res.Total) / totalTime.Seconds()
 	fmt.Printf("Throughput:    %.2f req/sec\n", throughput)
+	fmt.Printf("Workers:       %d\n", req.Workers)
+	fmt.Println("===================================")
 }
