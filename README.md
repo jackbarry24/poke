@@ -1,6 +1,6 @@
 # poke
 
-**poke** is a fast, minimal, curl replacement for the terminal. It gives you powerful HTTP debugging with a CLI-first workflow, file-backed requests, 
+**poke** is a fast, minimal, HTTP request sender for the terminal. It is not designed as a drop in curl replacement, and will not offer nearly the same amount of features as curl. It gives you powerful HTTP debugging with a CLI-first workflow, file-backed requests, 
 Vim (or any other editor) based editing, and smart request reuse.
 
 ---
