@@ -34,7 +34,6 @@ func resolveCollectionFilePaths(input string) []string {
 			return nil
 		})
 	} else {
-		// It's a file, so just return it.
 		filepaths = append(filepaths, path)
 	}
 	return filepaths
@@ -49,13 +48,13 @@ func sendCollection(filepaths []string, verbose bool) {
 		if err != nil {
 			fmt.Printf("File '%s' is not a valid request: %v\n", path, err)
 		} else {
-			runRequest(req, verbose)
+			RunRequest(req, verbose)
 		}
 		fmt.Println()
 	}
 }
 
-func listCollections() {
+func ListCollections() {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Printf("Error finding home directory: %v\n", err)
@@ -85,7 +84,7 @@ func listCollections() {
 	fmt.Println(strings.Repeat("=", 40))
 }
 
-func listCollection(collectionName string) {
+func ListCollection(collectionName string) {
 	collectionPath, err := resolveCollectionPath(collectionName)
 	if err != nil {
 		fmt.Printf("Collection '%s' not found: %v\n", collectionName, err)

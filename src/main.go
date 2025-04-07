@@ -7,17 +7,31 @@ import (
 	"time"
 )
 
-func main() {
-	//create the ~/.poke/requests and collections directories if they don't exist
-	home, err := os.UserHomeDir()
-	if err != nil {
-		fmt.Println("Error finding home directory:", err)
-		return
-	}
-	requestsDir := fmt.Sprintf("%s/.poke/requests", home)
-	collectionsDir := fmt.Sprintf("%s/.poke/collections", home)
-	os.MkdirAll(requestsDir, 0755)
-	os.MkdirAll(collectionsDir, 0755)
+func ParseCLIOptions() *CLIOptions {
+	opts := &CLIOptions{}
+
+	flag.StringVar(&opts.Method, "X", "GET", "HTTP method to use")
+	flag.StringVar(&opts.Method, "method", "GET", "HTTP method to use")
+
+	flag.StringVar(&opts.Data, "d", "", "Request body payload")
+	flag.StringVar(&opts.Data, "data", "", "Request body payload")
+	flag.StringVar(&opts.DataFile, "data-file", "", "File containing request body payload")
+	flag.BoolVar(&opts.DataStdin, "data-stdin", false, "Read request body from stdin")
+
+	flag.StringVar(&opts.UserAgent, "A", "poke/1.0", "Set the User-Agent header")
+	flag.StringVar(&opts.UserAgent, "user-agent", "poke/1.0", "Set the User-Agent header")
+	flag.StringVar(&opts.Headers, "H", "", "Request headers (key:value)")
+	flag.StringVar(&opts.Headers, "headers", "", "Request headers (key:value)")
+
+	flag.IntVar(&opts.Repeat, "repeat", 1, "Number of times to send the request (across all workers)")
+	flag.IntVar(&opts.Workers, "workers", 1, "Number of concurrent workers")
+	flag.IntVar(&opts.ExpectStatus, "expect-status", 0, "Expected status code")
+	flag.BoolVar(&opts.Editor, "edit", false, "Open payload in editor")
+	flag.StringVar(&opts.SavePath, "save", "", "Save request to file")
+
+	flag.BoolVar(&opts.Verbose, "v", false, "Verbose output")
+	flag.BoolVar(&opts.Verbose, "verbose", false, "Verbose output")
+	flag.BoolVar(&opts.Help, "h", false, "Show help message")
 
 	flag.Usage = func() {
 		fmt.Println("Usage: poke [command] [options] <args>")
@@ -28,96 +42,86 @@ func main() {
 		flag.PrintDefaults()
 	}
 
-	// Global flags.
-	method := flag.String("X", "GET", "HTTP method to use")
-	flag.StringVar(method, "method", "GET", "HTTP method to use")
-	data := flag.String("d", "", "Request body payload")
-	flag.StringVar(data, "data", "", "Request body payload")
-	dataFile := flag.String("data-file", "", "Path to file containing request body")
-	dataStdin := flag.Bool("data-stdin", false, "Read request body from stdin")
-	userAgent := flag.String("A", "poke/1.0", "Set the User-Agent header")
-	flag.StringVar(userAgent, "user-agent", "poke/1.0", "Set the User-Agent header")
-	headers := flag.String("H", "", "Request headers (key:value)")
-	flag.StringVar(headers, "headers", "", "Request headers (key:value)")
-	verbose := flag.Bool("v", false, "Verbose output")
-	flag.BoolVar(verbose, "verbose", false, "Verbose output")
-	repeat := flag.Int("repeat", 1, "Number of times to send the request (across all workers)")
-	workers := flag.Int("workers", 1, "Number of concurrent workers")
-	expectStatus := flag.Int("expect-status", 0, "Expected status code")
-	editor := flag.Bool("edit", false, "Open payload in editor")
-	savePath := flag.String("save", "", "Save request to file")
-	help := flag.Bool("h", false, "Show help message")
 	flag.Parse()
+	return opts
+}
 
+func main() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println("Error finding home directory:", err)
+		return
+	}
+	os.MkdirAll(fmt.Sprintf("%s/.poke/requests", home), 0755)
+	os.MkdirAll(fmt.Sprintf("%s/.poke/collections", home), 0755)
+
+	opts := ParseCLIOptions()
 	args := flag.Args()
+
 	if len(args) > 0 {
 		switch args[0] {
 		case "collections":
-			if *help {
+			if opts.Help {
 				fmt.Println("Usage: poke collections [collection_name]")
 			}
 			if len(args) > 1 {
-				listCollection(args[1])
+				ListCollection(args[1])
 			} else {
-				listCollections()
+				ListCollections()
 			}
 			return
 		case "send":
-			if *help {
-				fmt.Println("Usage: poke send <file|collection>")
-			}
-			if len(args) < 2 {
+			if opts.Help || len(args) < 2 {
 				fmt.Println("Usage: poke send <file|collection>")
 				os.Exit(1)
 			}
-			handleSendCommand(args[1], *verbose)
+			HandleSendCommand(args[1], opts)
 			return
 		}
 	}
 
-	if *help {
+	if opts.Help {
 		flag.Usage()
 		return
 	}
 
-	// Default behavior: build request from flags and send it.
 	if len(args) < 1 {
 		fmt.Println("Usage: poke [options] <url>")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
+
+	if opts.Workers > opts.Repeat {
+		opts.Workers = opts.Repeat
+	}
+
 	url := args[0]
-	headersMap := parseHeaders(*headers)
-	body := resolvePayload(*data, *dataFile, *dataStdin, *editor)
+	headersMap := parseHeaders(opts.Headers)
+	body := resolvePayload(opts.Data, opts.DataFile, opts.DataStdin, opts.Editor)
 	req := &PokeRequest{
-		Method:       *method,
+		Method:       opts.Method,
 		URL:          url,
 		Headers:      headersMap,
 		Body:         body,
+		BodyFile:     opts.DataFile,
+		BodyStdin:    opts.DataStdin,
 		CreatedAt:    time.Now(),
-		Workers:      *workers,
-		Repeat:       *repeat,
-		ExpectStatus: *expectStatus,
+		Workers:      opts.Workers,
+		Repeat:       opts.Repeat,
+		ExpectStatus: opts.ExpectStatus,
 	}
 
-	if *userAgent != "" {
-		req.Headers["User-Agent"] = *userAgent
+	if opts.UserAgent != "" {
+		req.Headers["User-Agent"] = opts.UserAgent
 	}
 
-	if *savePath != "" {
-		path := resolveRequestPath(*savePath)
-		if err := saveRequest(path, req, *data); err != nil {
+	if opts.SavePath != "" {
+		path := resolveRequestPath(opts.SavePath)
+		if err := saveRequest(path, req); err != nil {
 			Error("Failed to save request", err)
 		}
 		fmt.Printf("Request saved to %s\n", path)
 	}
 
-	if req.Repeat > 1 {
-		if req.Workers > req.Repeat {
-			req.Workers = req.Repeat
-		}
-		RunBenchmark(req, *verbose)
-	} else {
-		runRequest(req, *verbose)
-	}
+	RunRequest(req, opts.Verbose)
 }

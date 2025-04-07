@@ -11,15 +11,19 @@ import (
 	"github.com/fatih/color"
 )
 
-func saveRequest(path string, req *PokeRequest, data string) error {
-	originalBody := req.Body
-	defer func() { req.Body = originalBody }()
+func saveRequest(path string, req *PokeRequest) error {
+	// if req.BodyFile is set, we should not set the body
+	// in case the user edits the file later
+	if req.BodyFile != "" {
+		req.Body = ""
+	}
 
-	// If the data starts with '@', treat it as a file path
-	// save the file path in the saved request not the content
-	// this allows us to edit the file later
-	if strings.HasPrefix(data, "@") {
-		req.Body = data
+	// if req.BodyStdin is true, we set the body from stdin
+	// we save this stdin to the .json and set the stdin flag to false
+	// because if we run the request again (especially as a collection)
+	// it doesn't make sense to read from stdin again
+	if req.BodyStdin {
+		req.BodyStdin = false
 	}
 
 	buffer, err := json.MarshalIndent(req, "", "  ")
@@ -41,18 +45,6 @@ func loadRequest(path string) (*PokeRequest, error) {
 		return nil, err
 	}
 
-	if strings.HasPrefix(req.Body, "@") {
-		payloadPath := strings.TrimPrefix(req.Body, "@")
-		if payloadPath == "-" {
-			req.Body = "@-"
-		} else {
-			contents, err := os.ReadFile(payloadPath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read payload file: %v", err)
-			}
-			req.Body = string(contents)
-		}
-	}
 	return &req, nil
 }
 
@@ -107,7 +99,7 @@ func colorStatus(code int) string {
 	}
 }
 
-func resolvePayload(data, dataFile string, dataStdin, editor bool) string {
+func resolvePayload(data string, dataFile string, dataStdin, editor bool) string {
 	count := 0
 	if data != "" {
 		count++

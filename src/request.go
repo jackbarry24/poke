@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func runRequest(req *PokeRequest, verbose bool) {
+func RunRequest(req *PokeRequest, verbose bool) {
 	if req.Repeat > 1 {
 		if req.Workers > req.Repeat {
 			req.Workers = req.Repeat
@@ -51,26 +51,27 @@ func SendRequest(req PokeRequest) (*http.Response, error) {
 	return client.Do(request)
 }
 
-func handleSendCommand(sendArg string, verbose bool) {
+func HandleSendCommand(sendArg string, opts *CLIOptions) {
 	if strings.HasSuffix(sendArg, ".json") {
 		// Single JSON file – load and run that request.
 		reqPath := resolveRequestPath(sendArg)
 		loaded, err := loadRequest(reqPath)
+		loaded.Body = resolvePayload(loaded.Body, loaded.BodyFile, loaded.BodyStdin, opts.Editor)
 		if err != nil {
 			Error("Failed to load request from file", err)
 		}
-		runRequest(loaded, verbose)
+		RunRequest(loaded, opts.Verbose)
 	} else {
 		// Not a JSON file – treat it as a collection.
 		filepaths := resolveCollectionFilePaths(sendArg)
 		if len(filepaths) > 1 {
-			sendCollection(filepaths, verbose)
+			sendCollection(filepaths, opts.Verbose)
 		} else if len(filepaths) == 1 {
 			loaded, err := loadRequest(filepaths[0])
 			if err != nil {
 				Error("Failed to load request from file", err)
 			}
-			runRequest(loaded, verbose)
+			RunRequest(loaded, opts.Verbose)
 		} else {
 			Error(fmt.Sprintf("No JSON files found in %s", sendArg), nil)
 		}
