@@ -7,9 +7,7 @@ import (
 	"strings"
 )
 
-// resolveCollectionFilePaths returns a slice of JSON file paths from the given collection directory.
 func resolveCollectionFilePaths(input string) []string {
-	// Attempt to resolve the collection path from the current directory first.
 	path := filepath.Join(".", ".poke", input)
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
@@ -26,7 +24,6 @@ func resolveCollectionFilePaths(input string) []string {
 
 	var filepaths []string
 	if info.IsDir() {
-		// Walk the directory and collect .json files.
 		filepath.Walk(path, func(p string, info os.FileInfo, err error) error {
 			if err != nil {
 				return nil
@@ -43,51 +40,51 @@ func resolveCollectionFilePaths(input string) []string {
 	return filepaths
 }
 
-// sendCollection iterates over each JSON file in the collection and runs the request.
 func sendCollection(filepaths []string, verbose bool) {
 	for i, path := range filepaths {
+		fmt.Println(strings.Repeat("-", 40))
 		fmt.Printf("Request %d/%d: %s\n", i+1, len(filepaths), path)
 		fmt.Println(strings.Repeat("-", 40))
 		req, err := loadRequest(path)
 		if err != nil {
-			fmt.Printf("Error loading %s: %v\n", path, err)
-			continue
+			fmt.Printf("File '%s' is not a valid request: %v\n", path, err)
+		} else {
+			runRequest(req, verbose)
 		}
-		runRequest(req, verbose)
-		fmt.Println(strings.Repeat("-", 40))
+		fmt.Println()
 	}
 }
 
-// listCollections prints all collection directories from ~/.poke/collections and ./.poke.
 func listCollections() {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		fmt.Println("Error finding home directory:", err)
+		fmt.Printf("Error finding home directory: %v\n", err)
 		return
 	}
+
 	dirs := []string{
 		filepath.Join(home, ".poke", "collections"),
 		filepath.Join(".", ".poke"),
 	}
-	fmt.Println("Available Collections:")
-	fmt.Println(strings.Repeat("=", 40))
+
+	fmt.Println("======== Available Collections =========")
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			continue
 		}
-		fmt.Printf("From: %s\n", dir)
+
+		fmt.Printf("\nFrom: %s\n", dir)
 		fmt.Println(strings.Repeat("-", 40))
 		for _, entry := range entries {
 			if entry.IsDir() {
-				fmt.Printf("  - %s\n", entry.Name())
+				fmt.Printf("   - %s\n", entry.Name())
 			}
 		}
-		fmt.Println(strings.Repeat("-", 40))
 	}
+	fmt.Println(strings.Repeat("=", 40))
 }
 
-// listCollection lists all JSON files in the specified collection (recursively).
 func listCollection(collectionName string) {
 	collectionPath, err := resolveCollectionPath(collectionName)
 	if err != nil {
@@ -95,7 +92,7 @@ func listCollection(collectionName string) {
 		return
 	}
 	fmt.Println(strings.Repeat("=", 40))
-	fmt.Printf("JSON files in collection '%s':\n", collectionName)
+	fmt.Printf("Collection %s from %s\n", collectionName, collectionPath)
 	fmt.Println(strings.Repeat("-", 40))
 	err = filepath.Walk(collectionPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -113,7 +110,6 @@ func listCollection(collectionName string) {
 	fmt.Println(strings.Repeat("=", 40))
 }
 
-// resolveCollectionPath finds a collection directory from ~/.poke/collections or ./.poke.
 func resolveCollectionPath(name string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {

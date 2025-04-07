@@ -14,20 +14,20 @@ type BenchmarkResult struct {
 	Durations []time.Duration
 }
 
-func RunBenchmark(req *PokeRequest, repeat int, workers int, expectStatus int, verbose bool) BenchmarkResult {
+func RunBenchmark(req *PokeRequest, verbose bool) BenchmarkResult {
 	var wg sync.WaitGroup
-	resultChan := make(chan time.Duration, repeat)
-	errorChan := make(chan bool, repeat)
+	resultChan := make(chan time.Duration, req.Repeat)
+	errorChan := make(chan bool, req.Repeat)
 
 	startTime := time.Now()
 
 	// Calculate the base workload per worker and the remainder
-	baseWorkload := repeat / workers
-	remainder := repeat % workers
+	baseWorkload := req.Repeat / req.Workers
+	remainder := req.Repeat % req.Workers
 
 	var requestCounter int64
 
-	for i := 0; i < workers; i++ {
+	for i := range req.Workers {
 		wg.Add(1)
 		go func(workerIndex int) {
 			defer wg.Done()
@@ -53,7 +53,7 @@ func RunBenchmark(req *PokeRequest, repeat int, workers int, expectStatus int, v
 				}
 				resp.Body.Close()
 
-				if expectStatus > 0 && resp.StatusCode != expectStatus {
+				if req.ExpectStatus > 0 && resp.StatusCode != req.ExpectStatus {
 					errorChan <- true
 					continue
 				}
@@ -84,7 +84,7 @@ func RunBenchmark(req *PokeRequest, repeat int, workers int, expectStatus int, v
 	}
 
 	res := BenchmarkResult{
-		Total:     repeat,
+		Total:     req.Repeat,
 		Successes: successes,
 		Failures:  failures,
 		Durations: durations,

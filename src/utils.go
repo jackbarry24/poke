@@ -66,7 +66,7 @@ func resolveRequestPath(input string) string {
 		return input
 	}
 
-	dir := filepath.Join(home, ".poke", "requests")
+	dir := filepath.Join(home, ".poke")
 	os.MkdirAll(dir, 0755)
 	return filepath.Join(dir, input)
 }
@@ -107,27 +107,34 @@ func colorStatus(code int) string {
 	}
 }
 
-func resolvePayload(data string, editor bool) string {
+func resolvePayload(data, dataFile string, dataStdin, editor bool) string {
+	count := 0
+	if data != "" {
+		count++
+	}
+	if dataFile != "" {
+		count++
+	}
+	if dataStdin {
+		count++
+	}
+	if count > 1 {
+		Error("Only one of --data, --data-file, or --data-stdin can be used", nil)
+	}
+
 	var prefill string
-
-	if strings.HasPrefix(data, "@") {
-		path := strings.TrimPrefix(data, "@")
-
-		if path == "-" {
-			input, err := io.ReadAll(os.Stdin)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to read from stdin: %v\n", err)
-				os.Exit(1)
-			}
-			prefill = string(input)
-		} else {
-			fileBytes, err := os.ReadFile(path)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Failed to read payload file %s: %v\n", path, err)
-				os.Exit(1)
-			}
-			prefill = string(fileBytes)
+	if dataFile != "" {
+		bytes, err := os.ReadFile(dataFile)
+		if err != nil {
+			Error("Failed to read file", err)
 		}
+		prefill = string(bytes)
+	} else if dataStdin {
+		bytes, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			Error("Failed to read stdin", err)
+		}
+		prefill = string(bytes)
 	} else {
 		prefill = data
 	}
@@ -135,12 +142,10 @@ func resolvePayload(data string, editor bool) string {
 	if editor {
 		edited, err := openEditorWithContent(prefill)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to open editor: %v\n", err)
-			os.Exit(1)
+			Error("Failed to open editor", err)
 		}
 		return edited
 	}
-
 	return prefill
 }
 

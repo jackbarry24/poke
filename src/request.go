@@ -13,7 +13,7 @@ func runRequest(req *PokeRequest, verbose bool) {
 		if req.Workers > req.Repeat {
 			req.Workers = req.Repeat
 		}
-		RunBenchmark(req, req.Repeat, req.Workers, req.ExpectStatus, verbose)
+		RunBenchmark(req, verbose)
 		return
 	}
 

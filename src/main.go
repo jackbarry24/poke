@@ -23,7 +23,6 @@ func main() {
 		fmt.Println("Usage: poke [command] [options] <args>")
 		fmt.Println("Commands:")
 		fmt.Println("  collections             List all collections")
-		fmt.Println("  list <collection>       List all saved requests in a collection")
 		fmt.Println("  send <file|collection>  Send request(s) from a file or collection")
 		fmt.Println("  (default)               Send/Save a request")
 		flag.PrintDefaults()
@@ -34,6 +33,8 @@ func main() {
 	flag.StringVar(method, "method", "GET", "HTTP method to use")
 	data := flag.String("d", "", "Request body payload")
 	flag.StringVar(data, "data", "", "Request body payload")
+	dataFile := flag.String("data-file", "", "Path to file containing request body")
+	dataStdin := flag.Bool("data-stdin", false, "Read request body from stdin")
 	userAgent := flag.String("A", "poke/1.0", "Set the User-Agent header")
 	flag.StringVar(userAgent, "user-agent", "poke/1.0", "Set the User-Agent header")
 	headers := flag.String("H", "", "Request headers (key:value)")
@@ -44,24 +45,27 @@ func main() {
 	workers := flag.Int("workers", 1, "Number of concurrent workers")
 	expectStatus := flag.Int("expect-status", 0, "Expected status code")
 	editor := flag.Bool("edit", false, "Open payload in editor")
-	savePath := flag.String("save", "", "Save request to file (works with normal poke usage)")
+	savePath := flag.String("save", "", "Save request to file")
+	help := flag.Bool("h", false, "Show help message")
 	flag.Parse()
 
 	args := flag.Args()
-	// Subcommand dispatch.
 	if len(args) > 0 {
 		switch args[0] {
 		case "collections":
-			listCollections()
-			return
-		case "list":
-			if len(args) < 2 {
-				fmt.Println("Usage: poke list <collection>")
-				os.Exit(1)
+			if *help {
+				fmt.Println("Usage: poke collections [collection_name]")
 			}
-			listCollection(args[1])
+			if len(args) > 1 {
+				listCollection(args[1])
+			} else {
+				listCollections()
+			}
 			return
 		case "send":
+			if *help {
+				fmt.Println("Usage: poke send <file|collection>")
+			}
 			if len(args) < 2 {
 				fmt.Println("Usage: poke send <file|collection>")
 				os.Exit(1)
@@ -69,6 +73,11 @@ func main() {
 			handleSendCommand(args[1], *verbose)
 			return
 		}
+	}
+
+	if *help {
+		flag.Usage()
+		return
 	}
 
 	// Default behavior: build request from flags and send it.
@@ -79,7 +88,7 @@ func main() {
 	}
 	url := args[0]
 	headersMap := parseHeaders(*headers)
-	body := resolvePayload(*data, *editor)
+	body := resolvePayload(*data, *dataFile, *dataStdin, *editor)
 	req := &PokeRequest{
 		Method:       *method,
 		URL:          url,
@@ -107,8 +116,7 @@ func main() {
 		if req.Workers > req.Repeat {
 			req.Workers = req.Repeat
 		}
-		RunBenchmark(req, req.Repeat, req.Workers, req.ExpectStatus, *verbose)
-		return
+		RunBenchmark(req, *verbose)
 	} else {
 		runRequest(req, *verbose)
 	}
