@@ -7,13 +7,18 @@ Vim (or any other editor) based editing, and smart request reuse.
 
 ## Features
 
+## Features
+
 - `-X`, `-d`, `-H` curl-style flags
-- Load payloads from files: `-d @payload.json`
-- Load payloads from stdin: `-d @-`
-- `--edit` flag to open payloas in `$EDITOR` (prefilled if using `-d`)
+- Load payloads from files: `--data-file payload.json`
+- Load payloads from stdin: `--data-stdin`
+- `--edit` flag to open payloads in `$EDITOR` 
 - Save complete requests to disk: `--save myreq.json`
-- Send previously saved requests: `--send myreq.json`
+- Send previously saved requests: `send <file|collection>`
 - Pretty, colorized output
+- Reusable request collections (`collections` command)
+- Concurrency with `--workers` and `--repeat`
+- Auto-verifies status codes via `--expect-status`
 
 ---
 
@@ -39,30 +44,40 @@ poke -X POST -d '{"hello":"world"}' -H "Content-Type:application/json" https://h
 
 Load payload from file
 ```bash
-poke -X POST -d @payload.json -H "Content-Type:application/json" https://api.example.com/data
+poke -X POST --data-file payload.json -H "Content-Type:application/json" https://httpbin.org/post
 ```
 
 Pipe from stdin
 ```bash
-cat payload.json | poke -X POST -d @- https://api.example.com
+cat payload.json | poke -X POST --data-stdin -H "Content-Type:application/json" https://httpbin.org/post
 ```
 
 Use editor
 ```bash
-poke -X POST --edit -H "Content-Type:application/json" https://api.example.com
+poke -X POST --edit -H "Content-Type:application/json" https://httpbin.org/post
 ```
 
 Save request
 ```bash
-poke -X PUT -d @data.json --save update-user.json https://api.example.com/users/123
+poke -X PUT --data-file data.json --save test.json https://httpbin.org/post
 ```
 
 Re-send saved request
 ```bash
-poke --send update-user.json
+poke send test.json
 ```
 
-Re-send and override
+List collections
 ```bash
-poke --send update-user.json -X PATCH -d @patch.json
+poke collections
+```
+
+View a collection
+```bash
+poke collections my_collection
+```
+
+Run a collection
+```bash
+poke send my_collection
 ```
