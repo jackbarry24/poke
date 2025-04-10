@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +19,7 @@ type RequestRunner interface {
 	Send(req *types.PokeRequest) (*types.PokeResponse, error)
 	RunBenchmark(req *types.PokeRequest, verbose bool) error
 	RunSingleRequest(req *types.PokeRequest, verbose bool) error
+	Route(path string, verbose bool) error
 	Save(req *types.PokeRequest, saveAs string) error
 	Load(path string) (*types.PokeRequest, error)
 }
@@ -108,21 +110,76 @@ func (r *DefaultRequestRunnerImpl) Save(req *types.PokeRequest, path string) err
 		return err
 	}
 
+	dir := filepath.Dir(path)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+	}
+
 	return os.WriteFile(path, out, 0644)
 }
 
-// func (r *DefaultRequestRunnerImpl) resolveSavePath(input string) string {
-// 	if filepath.IsAbs(input) || strings.Contains(input, "/") {
-// 		return input
-// 	}
-// 	home, err := os.UserHomeDir()
-// 	if err != nil {
-// 		return input
-// 	}
-// 	dir := filepath.Join(home, ".poke")
-// 	_ = os.MkdirAll(dir, 0755)
-// 	return filepath.Join(dir, input)
-// }
+// Route handles if the request should be treated as a single request or a collection of requests
+func (r *DefaultRequestRunnerImpl) Route(path string, verbose bool) error {
+	resolver := &DefaultPayloadResolverImpl{}
+
+	// Is this a single .json file?
+	if strings.HasSuffix(path, ".json") {
+		if _, err := os.Stat(path); err == nil {
+			req, err := r.Load(path)
+			if err != nil {
+				return fmt.Errorf("failed to load request: %w", err)
+			}
+			body, err := resolver.Resolve(req.Body, req.BodyFile, req.BodyStdin, false)
+			if err != nil {
+				return fmt.Errorf("failed to resolve payload: %w", err)
+			}
+			req.Body = body
+			req.BodyFile = ""
+			req.BodyStdin = false
+			return r.Execute(req, verbose)
+		}
+	}
+
+	// Try treating as a collection
+	paths, err := walkPath(path)
+	if err != nil {
+		return fmt.Errorf("could not resolve collection: %w", err)
+	}
+	if len(paths) == 0 {
+		return fmt.Errorf("no .json files found for '%s'", path)
+	}
+
+	for i, path := range paths {
+		fmt.Println(strings.Repeat("-", 40))
+		fmt.Printf("Request %d/%d: %s\n", i+1, len(paths), path)
+		fmt.Println(strings.Repeat("-", 40))
+
+		req, err := r.Load(path)
+		if err != nil {
+			fmt.Printf("File '%s' is not a valid request: %v\n", path, err)
+			continue
+		}
+
+		payloadResolver := &DefaultPayloadResolverImpl{}
+		body, err := payloadResolver.Resolve(req.Body, req.BodyFile, req.BodyStdin, false)
+		if err != nil {
+			fmt.Printf("Failed to resolve body for '%s': %v\n", path, err)
+			continue
+		}
+		req.Body = body
+		req.BodyFile = ""
+		req.BodyStdin = false
+
+		err = r.Execute(req, verbose)
+		if err != nil {
+			fmt.Printf("Request failed: %v\n", err)
+		}
+		fmt.Println()
+	}
+	return nil
+}
 
 func (r *DefaultRequestRunnerImpl) Load(path string) (*types.PokeRequest, error) {
 	data, err := os.ReadFile(path)
@@ -146,4 +203,33 @@ func (r *DefaultRequestRunnerImpl) Load(path string) (*types.PokeRequest, error)
 	templater := &DefaultTemplateEngineImpl{}
 	templater.ApplyRequest(&req, map[string]string{})
 	return &req, nil
+}
+
+func walkPath(path string) ([]string, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("path does not exist: %s", path)
+		}
+		return nil, fmt.Errorf("could not access path: %s", path)
+	}
+
+	var paths []string
+	if info.IsDir() {
+		err := filepath.Walk(path, func(p string, fi os.FileInfo, err error) error {
+			if err != nil {
+				return nil
+			}
+			if !fi.IsDir() && strings.HasSuffix(fi.Name(), ".json") {
+				paths = append(paths, p)
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		paths = append(paths, path)
+	}
+	return paths, nil
 }

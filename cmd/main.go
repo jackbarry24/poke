@@ -4,8 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path"
-	"path/filepath"
 	"time"
 
 	"poke/core"
@@ -16,23 +14,15 @@ import (
 func main() {
 	templater := &core.DefaultTemplateEngineImpl{}
 	payloadResolver := &core.DefaultPayloadResolverImpl{}
-	collectionHandler := &core.DefaultCollectionHandlerImpl{}
 	requestRunner := &core.DefaultRequestRunnerImpl{}
 
 	templater.LoadEnv()
-
-	ensurePokeDirs()
-
 	opts := parseCLIOptions()
 	args := flag.Args()
 
-	// Route CLI commands
 	switch {
-	case len(args) > 0 && args[0] == "collections":
-		handleCollections(args, opts, collectionHandler)
-		return
-	case len(args) > 0 && args[0] == "send":
-		handleSend(args, opts, collectionHandler)
+	case len(args) > 0 && args[0] == "run":
+		handleSend(args, opts, requestRunner)
 		return
 	case opts.Help:
 		printUsage()
@@ -43,7 +33,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Default single or benchmarked request
 	if opts.Workers > opts.Repeat {
 		opts.Workers = opts.Repeat
 	}
@@ -74,41 +63,15 @@ func main() {
 		req.Headers["User-Agent"] = opts.UserAgent
 	}
 
-	if opts.SaveGlobal != "" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			util.Error("Could not determine home directory", err)
-		}
-		savePath := path.Join(homeDir, ".poke", opts.SaveGlobal)
-		if err := requestRunner.Save(req, savePath); err != nil {
+	if opts.SavePath != "" {
+		if err := requestRunner.Save(req, opts.SavePath); err != nil {
 			util.Error("Failed to save request", err)
 		}
-		fmt.Printf("Request saved to %s\n", savePath)
-	}
-	if opts.SaveLocal != "" {
-		if err := requestRunner.Save(req, opts.SaveLocal); err != nil {
-			util.Error("Failed to save request", err)
-		}
-		fmt.Printf("Request saved to %s\n", opts.SaveLocal)
+		fmt.Printf("Request saved to %s\n", opts.SavePath)
 	}
 
 	if err := requestRunner.Execute(req, opts.Verbose); err != nil {
 		util.Error("Failed to execute request", err)
-	}
-}
-
-func ensurePokeDirs() {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		util.Error("Could not determine home directory", err)
-	}
-	dirs := []string{
-		filepath.Join(home, ".poke"),
-		filepath.Join(home, ".poke", "collections"),
-		filepath.Join(".", ".poke"),
-	}
-	for _, dir := range dirs {
-		_ = os.MkdirAll(dir, 0755)
 	}
 }
 
@@ -129,8 +92,7 @@ func parseCLIOptions() *types.CLIOptions {
 	flag.IntVar(&opts.Workers, "workers", 1, "Number of concurrent workers")
 	flag.IntVar(&opts.ExpectStatus, "expect-status", 0, "Expected status code")
 	flag.BoolVar(&opts.Editor, "edit", false, "Open payload in editor")
-	flag.StringVar(&opts.SaveGlobal, "save-global", "", "Save the request @ ~/.poke")
-	flag.StringVar(&opts.SaveLocal, "save", "", "Save request to file")
+	flag.StringVar(&opts.SavePath, "save", "", "Save request to file")
 	flag.BoolVar(&opts.Verbose, "v", false, "Verbose output")
 	flag.BoolVar(&opts.Verbose, "verbose", false, "Verbose output")
 	flag.BoolVar(&opts.Help, "h", false, "Show help message")
@@ -143,28 +105,17 @@ func parseCLIOptions() *types.CLIOptions {
 func printUsage() {
 	fmt.Println("Usage: poke [command] [options] <args>")
 	fmt.Println("Commands:")
-	fmt.Println("  collections             List all collections")
-	fmt.Println("  send <file|collection>  Send request(s) from a file or collection")
+	fmt.Println("  run <path>  Send request(s) from a file/directory")
 	flag.PrintDefaults()
 }
 
-func handleCollections(args []string, opts *types.CLIOptions, handler core.CollectionHandler) {
-	if opts.Help {
-		fmt.Println("Usage: poke collections [collection_name]")
-	}
-	if len(args) > 1 {
-		_ = handler.List(args[1])
-	} else {
-		_ = handler.ListAll()
-	}
-}
-
-func handleSend(args []string, opts *types.CLIOptions, handler core.CollectionHandler) {
+func handleSend(args []string, opts *types.CLIOptions, handler core.RequestRunner) {
 	if opts.Help || len(args) < 2 {
-		fmt.Println("Usage: poke send <file|collection>")
+		fmt.Println("Usage: poke run <path>")
 		os.Exit(1)
 	}
-	if err := handler.Send(args[1], opts.Verbose); err != nil {
+
+	if err := handler.Route(args[1], opts.Verbose); err != nil {
 		util.Error("Failed to send request(s)", err)
 	}
 }

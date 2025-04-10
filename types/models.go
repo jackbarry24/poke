@@ -17,8 +17,7 @@ type CLIOptions struct {
 	Workers      int
 	ExpectStatus int
 	Editor       bool
-	SaveGlobal   string
-	SaveLocal    string
+	SavePath     string // save to .poke
 	Help         bool
 }
 
