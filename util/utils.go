@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"poke/types"
@@ -15,22 +14,22 @@ import (
 	"github.com/fatih/color"
 )
 
-// ========== Request I/O ==========
+// // ========== Request I/O ==========
 
-func ResolveRequestPath(input string) string {
-	if strings.Contains(input, "/") {
-		return input
-	}
+// func ResolveRequestPath(input string) string {
+// 	if strings.Contains(input, "/") {
+// 		return input
+// 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return input
-	}
+// 	home, err := os.UserHomeDir()
+// 	if err != nil {
+// 		return input
+// 	}
 
-	dir := filepath.Join(home, ".poke")
-	_ = os.MkdirAll(dir, 0755)
-	return filepath.Join(dir, input)
-}
+// 	dir := filepath.Join(home, ".poke")
+// 	_ = os.MkdirAll(dir, 0755)
+// 	return filepath.Join(dir, input)
+// }
 
 // ========== Response Output ==========
 

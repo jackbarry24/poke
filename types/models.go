@@ -17,7 +17,8 @@ type CLIOptions struct {
 	Workers      int
 	ExpectStatus int
 	Editor       bool
-	SavePath     string
+	SaveGlobal   string
+	SaveLocal    string
 	Help         bool
 }
 

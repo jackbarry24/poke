@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
@@ -73,12 +74,22 @@ func main() {
 		req.Headers["User-Agent"] = opts.UserAgent
 	}
 
-	if opts.SavePath != "" {
-		savePath := util.ResolveRequestPath(opts.SavePath)
+	if opts.SaveGlobal != "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			util.Error("Could not determine home directory", err)
+		}
+		savePath := path.Join(homeDir, ".poke", opts.SaveGlobal)
 		if err := requestRunner.Save(req, savePath); err != nil {
 			util.Error("Failed to save request", err)
 		}
 		fmt.Printf("Request saved to %s\n", savePath)
+	}
+	if opts.SaveLocal != "" {
+		if err := requestRunner.Save(req, opts.SaveLocal); err != nil {
+			util.Error("Failed to save request", err)
+		}
+		fmt.Printf("Request saved to %s\n", opts.SaveLocal)
 	}
 
 	if err := requestRunner.Execute(req, opts.Verbose); err != nil {
@@ -92,8 +103,9 @@ func ensurePokeDirs() {
 		util.Error("Could not determine home directory", err)
 	}
 	dirs := []string{
-		filepath.Join(home, ".poke", "requests"),
+		filepath.Join(home, ".poke"),
 		filepath.Join(home, ".poke", "collections"),
+		filepath.Join(".", ".poke"),
 	}
 	for _, dir := range dirs {
 		_ = os.MkdirAll(dir, 0755)
@@ -117,7 +129,8 @@ func parseCLIOptions() *types.CLIOptions {
 	flag.IntVar(&opts.Workers, "workers", 1, "Number of concurrent workers")
 	flag.IntVar(&opts.ExpectStatus, "expect-status", 0, "Expected status code")
 	flag.BoolVar(&opts.Editor, "edit", false, "Open payload in editor")
-	flag.StringVar(&opts.SavePath, "save", "", "Save request to file")
+	flag.StringVar(&opts.SaveGlobal, "save-global", "", "Save the request @ ~/.poke")
+	flag.StringVar(&opts.SaveLocal, "save", "", "Save request to file")
 	flag.BoolVar(&opts.Verbose, "v", false, "Verbose output")
 	flag.BoolVar(&opts.Verbose, "verbose", false, "Verbose output")
 	flag.BoolVar(&opts.Help, "h", false, "Show help message")

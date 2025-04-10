@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +17,7 @@ type RequestRunner interface {
 	Execute(req *types.PokeRequest, verbose bool) error
 	Send(req *types.PokeRequest) (*types.PokeResponse, error)
 	RunBenchmark(req *types.PokeRequest, verbose bool) error
+	RunSingleRequest(req *types.PokeRequest, verbose bool) error
 	Save(req *types.PokeRequest, saveAs string) error
 	Load(path string) (*types.PokeRequest, error)
 }
@@ -28,10 +28,10 @@ func (r *DefaultRequestRunnerImpl) Execute(req *types.PokeRequest, verbose bool)
 	if req.Repeat > 1 {
 		return r.RunBenchmark(req, verbose)
 	}
-	return r.runSingleRequest(req, verbose)
+	return r.RunSingleRequest(req, verbose)
 }
 
-func (r *DefaultRequestRunnerImpl) runSingleRequest(req *types.PokeRequest, verbose bool) error {
+func (r *DefaultRequestRunnerImpl) RunSingleRequest(req *types.PokeRequest, verbose bool) error {
 	start := time.Now()
 	resp, err := r.Send(req)
 	duration := time.Since(start).Seconds()
@@ -90,7 +90,7 @@ func (r *DefaultRequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResp
 	}, nil
 }
 
-func (r *DefaultRequestRunnerImpl) Save(req *types.PokeRequest, saveAs string) error {
+func (r *DefaultRequestRunnerImpl) Save(req *types.PokeRequest, path string) error {
 	if req.BodyFile != "" {
 		req.Body = ""
 	}
@@ -108,22 +108,21 @@ func (r *DefaultRequestRunnerImpl) Save(req *types.PokeRequest, saveAs string) e
 		return err
 	}
 
-	path := r.resolveSavePath(saveAs)
 	return os.WriteFile(path, out, 0644)
 }
 
-func (r *DefaultRequestRunnerImpl) resolveSavePath(input string) string {
-	if filepath.IsAbs(input) || strings.Contains(input, "/") {
-		return input
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return input
-	}
-	dir := filepath.Join(home, ".poke")
-	_ = os.MkdirAll(dir, 0755)
-	return filepath.Join(dir, input)
-}
+// func (r *DefaultRequestRunnerImpl) resolveSavePath(input string) string {
+// 	if filepath.IsAbs(input) || strings.Contains(input, "/") {
+// 		return input
+// 	}
+// 	home, err := os.UserHomeDir()
+// 	if err != nil {
+// 		return input
+// 	}
+// 	dir := filepath.Join(home, ".poke")
+// 	_ = os.MkdirAll(dir, 0755)
+// 	return filepath.Join(dir, input)
+// }
 
 func (r *DefaultRequestRunnerImpl) Load(path string) (*types.PokeRequest, error) {
 	data, err := os.ReadFile(path)
