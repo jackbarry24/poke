@@ -47,6 +47,9 @@ func ParseCLIOptions() *CLIOptions {
 }
 
 func main() {
+
+	loadEnvFile()
+
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Println("Error finding home directory:", err)

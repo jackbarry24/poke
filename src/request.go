@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -55,6 +56,9 @@ func HandleSendCommand(sendArg string, opts *CLIOptions) {
 	if strings.HasSuffix(sendArg, ".json") {
 		// Single JSON file – load and run that request.
 		reqPath := resolveRequestPath(sendArg)
+		if _, err := os.Stat(reqPath); os.IsNotExist(err) {
+			Error(fmt.Sprintf("File '%s' does not exist", reqPath), err)
+		}
 		loaded, err := loadRequest(reqPath)
 		loaded.Body = resolvePayload(loaded.Body, loaded.BodyFile, loaded.BodyStdin, opts.Editor)
 		if err != nil {

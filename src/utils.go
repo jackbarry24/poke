@@ -45,6 +45,8 @@ func loadRequest(path string) (*PokeRequest, error) {
 		return nil, err
 	}
 
+	context := map[string]string{}
+	applyTemplateToRequest(&req, context)
 	return &req, nil
 }
 
