@@ -49,6 +49,7 @@ func main() {
 
 	url := args[0]
 	headers := util.ParseHeaders(opts.Headers)
+	queryParams := util.ParseQueryParams(url)
 	payload, err := payloadResolver.Resolve(opts.Data, opts.DataFile, opts.DataStdin, opts.Editor)
 	if err != nil {
 		util.Error("Failed to resolve payload", err)
@@ -58,6 +59,7 @@ func main() {
 		Method:       opts.Method,
 		URL:          url,
 		Headers:      headers,
+		QueryParams:  queryParams,
 		Body:         payload,
 		BodyFile:     opts.DataFile,
 		BodyStdin:    false,

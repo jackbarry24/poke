@@ -97,6 +97,26 @@ func ParseHeaders(headerStr string) map[string]string {
 	return headers
 }
 
+func ParseQueryParams(url string) map[string]string {
+	queryParams := make(map[string]string)
+	if strings.Contains(url, "?") {
+		parts := strings.Split(url, "?")
+		if len(parts) > 1 {
+			queryStr := parts[1]
+			pairs := strings.Split(queryStr, "&")
+			for _, pair := range pairs {
+				kv := strings.SplitN(pair, "=", 2)
+				if len(kv) == 2 {
+					key := strings.TrimSpace(kv[0])
+					val := strings.TrimSpace(kv[1])
+					queryParams[key] = val
+				}
+			}
+		}
+	}
+	return queryParams
+}
+
 func MergeHeaders(base, extra map[string]string) {
 	for k, v := range extra {
 		base[k] = v
@@ -120,9 +140,14 @@ func ColorStatus(code int) string {
 
 func Error(msg string, err error) {
 	if err == nil {
-		fmt.Fprintf(os.Stderr, "Error: %s\n", msg)
+		fmt.Fprintf(os.Stderr, "[Error] %s\n", msg)
 	} else {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", msg, err)
+		fmt.Fprintf(os.Stderr, "[Error] %s: %v\n", msg, err)
 	}
 	os.Exit(1)
+}
+
+func Debug(msg string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "[Debug] "+msg+"\n", args...)
+	println()
 }

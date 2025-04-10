@@ -98,6 +98,11 @@ func (r *DefaultRequestRunnerImpl) Save(req *types.PokeRequest, saveAs string) e
 		req.BodyStdin = false
 	}
 
+	if strings.Contains(req.URL, "?") {
+		parts := strings.Split(req.URL, "?")
+		req.URL = parts[0]
+	}
+
 	out, err := json.MarshalIndent(req, "", "  ")
 	if err != nil {
 		return err
@@ -129,6 +134,16 @@ func (r *DefaultRequestRunnerImpl) Load(path string) (*types.PokeRequest, error)
 	if err := json.Unmarshal(data, &req); err != nil {
 		return nil, err
 	}
+
+	if len(req.QueryParams) > 0 && !strings.Contains(req.URL, "?") {
+		query := "?"
+		for k, v := range req.QueryParams {
+			query += fmt.Sprintf("%s=%s&", k, v)
+		}
+		query = strings.TrimSuffix(query, "&")
+		req.URL += query
+	}
+
 	templater := &DefaultTemplateEngineImpl{}
 	templater.ApplyRequest(&req, map[string]string{})
 	return &req, nil

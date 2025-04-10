@@ -89,7 +89,6 @@ func (c *DefaultCollectionHandlerImpl) Send(name string, verbose bool) error {
 			req.BodyStdin = false
 			return runner.Execute(req, verbose)
 		}
-		// If the file doesn't exist, fall through to collection resolution
 	}
 
 	// Try treating as a collection
