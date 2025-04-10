@@ -1,57 +1,61 @@
-package main
+package core
 
 import (
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"poke/types"
+	"poke/util"
 )
 
-type BenchmarkResult struct {
-	Total     int
-	Successes int
-	Failures  int
-	Durations []time.Duration
+type Benchmarker interface {
+	Run(req *types.PokeRequest, verbose bool) types.BenchmarkResult
 }
 
-func RunBenchmark(req *PokeRequest, verbose bool) BenchmarkResult {
+type DefaultBenchmarkerImpl struct{}
+
+func (b *DefaultBenchmarkerImpl) Run(req *types.PokeRequest, verbose bool) types.BenchmarkResult {
+	requestRunner := &DefaultRequestRunnerImpl{}
+
 	var wg sync.WaitGroup
 	resultChan := make(chan time.Duration, req.Repeat)
 	errorChan := make(chan bool, req.Repeat)
 
 	startTime := time.Now()
 
-	// Calculate the base workload per worker and the remainder
-	baseWorkload := req.Repeat / req.Workers
+	base := req.Repeat / req.Workers
 	remainder := req.Repeat % req.Workers
+	var counter int64
 
-	var requestCounter int64
-
-	for i := range req.Workers {
+	for i := 0; i < req.Workers; i++ {
 		wg.Add(1)
-		go func(workerIndex int) {
+		go func(workerID int) {
 			defer wg.Done()
-			// Assign an extra request to the first 'remainder' workers
-			workload := baseWorkload
-			if workerIndex < remainder {
+			workload := base
+			if workerID < remainder {
 				workload++
 			}
 			for j := 0; j < workload; j++ {
 				t0 := time.Now()
-				resp, err := SendRequest(*req)
+				resp, err := requestRunner.Send(req)
 				duration := time.Since(t0)
 
-				reqNum := atomic.AddInt64(&requestCounter, 1)
+				reqNum := atomic.AddInt64(&counter, 1)
 				if verbose {
-					status := colorStatus(resp.StatusCode)
-					fmt.Printf("Request %-3d [Worker %-2d]: %-7s (%v)\n", reqNum, workerIndex, status, duration)
+					status := "ERR"
+					if err == nil {
+						status = util.ColorStatus(resp.StatusCode)
+					}
+					fmt.Printf("Request %-3d [Worker %-2d]: %-7s (%v)\n", reqNum, workerID, status, duration)
 				}
 
 				if err != nil {
 					errorChan <- true
 					continue
 				}
-				resp.Body.Close()
+				resp.Raw.Body.Close()
 
 				if req.ExpectStatus > 0 && resp.StatusCode != req.ExpectStatus {
 					errorChan <- true
@@ -63,37 +67,39 @@ func RunBenchmark(req *PokeRequest, verbose bool) BenchmarkResult {
 			}
 		}(i)
 	}
+
 	wg.Wait()
 	totalTime := time.Since(startTime)
 	close(resultChan)
 	close(errorChan)
 
 	var durations []time.Duration
-	successes := 0
-	failures := 0
+	var successes, failures int
 
-	for ok := range errorChan {
-		if ok {
+	for err := range errorChan {
+		if err {
 			failures++
 		} else {
 			successes++
 		}
 	}
+
 	for d := range resultChan {
 		durations = append(durations, d)
 	}
 
-	res := BenchmarkResult{
+	result := types.BenchmarkResult{
 		Total:     req.Repeat,
 		Successes: successes,
 		Failures:  failures,
 		Durations: durations,
 	}
-	printBenchmarkResults(res, totalTime, req)
-	return res
+
+	printBenchmarkResults(result, totalTime.Seconds(), req)
+	return result
 }
 
-func printBenchmarkResults(res BenchmarkResult, totalTime time.Duration, req *PokeRequest) {
+func printBenchmarkResults(res types.BenchmarkResult, totalTime float64, req *types.PokeRequest) {
 	fmt.Println()
 	fmt.Println("===================================")
 	fmt.Println("       --- Poke Benchmark ---      ")
@@ -101,14 +107,15 @@ func printBenchmarkResults(res BenchmarkResult, totalTime time.Duration, req *Po
 	fmt.Printf("Requests:      %d\n", res.Total)
 	fmt.Printf("Success:       %d\n", res.Successes)
 	fmt.Printf("Failures:      %d\n", res.Failures)
-	fmt.Printf("Total time:    %.2fs\n", totalTime.Seconds())
+	fmt.Printf("Total time:    %.2fs\n", totalTime)
 
 	if len(res.Durations) == 0 {
 		fmt.Println("Avg duration:  N/A")
 		fmt.Println("Min:           N/A")
 		fmt.Println("Max:           N/A")
 	} else {
-		min, max, sum := res.Durations[0], res.Durations[0], time.Duration(0)
+		min, max := res.Durations[0], res.Durations[0]
+		var sum time.Duration
 		for _, d := range res.Durations {
 			if d < min {
 				min = d
@@ -124,7 +131,7 @@ func printBenchmarkResults(res BenchmarkResult, totalTime time.Duration, req *Po
 		fmt.Printf("Max:           %v\n", max)
 	}
 
-	throughput := float64(res.Total) / totalTime.Seconds()
+	throughput := float64(res.Total) / totalTime
 	fmt.Printf("Throughput:    %.2f req/sec\n", throughput)
 	fmt.Printf("Workers:       %d\n", req.Workers)
 	fmt.Println("===================================")

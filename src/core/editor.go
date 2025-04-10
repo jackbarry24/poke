@@ -1,4 +1,4 @@
-package main
+package core
 
 import (
 	"fmt"
@@ -9,21 +9,22 @@ import (
 	"golang.org/x/term"
 )
 
-func isTerminal(fd uintptr) bool {
-	return term.IsTerminal(int(fd))
+type Editor interface {
+	Open(initial string) (string, error)
 }
 
-func openEditorWithContent(initial string) (string, error) {
-	// Create a temporary file for editor input.
+type EditorImpl struct{}
+
+func (e *EditorImpl) Open(initial string) (string, error) {
 	tmpfile, err := os.CreateTemp("", "poke_edit_*.tmp")
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create temp file: %w", err)
 	}
 	defer os.Remove(tmpfile.Name())
 
 	if initial != "" {
 		if _, err := tmpfile.WriteString(initial); err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to write to temp file: %w", err)
 		}
 		tmpfile.Sync()
 	}
@@ -35,11 +36,10 @@ func openEditorWithContent(initial string) (string, error) {
 	}
 
 	var cmd *exec.Cmd
-	// If stdin is not a terminal, use /dev/tty.
-	if !isTerminal(os.Stdin.Fd()) {
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		tty, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 		if err != nil {
-			return "", fmt.Errorf("failed to open /dev/tty: %v", err)
+			return "", fmt.Errorf("failed to open /dev/tty: %w", err)
 		}
 		defer tty.Close()
 		cmd = exec.Command(editor, tmpfile.Name())
@@ -54,12 +54,13 @@ func openEditorWithContent(initial string) (string, error) {
 	}
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("editor exited with error: %v", err)
+		return "", fmt.Errorf("editor exited with error: %w", err)
 	}
 
 	editedBytes, err := os.ReadFile(tmpfile.Name())
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read edited file: %w", err)
 	}
+
 	return strings.TrimSpace(string(editedBytes)), nil
 }
