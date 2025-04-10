@@ -135,6 +135,25 @@ func ColorStatus(code int) string {
 	}
 }
 
+func ColorString(s string, colorName string) string {
+	switch colorName {
+	case "red":
+		return color.New(color.FgRed).Sprintf(s)
+	case "green":
+		return color.New(color.FgGreen).Sprintf(s)
+	case "yellow":
+		return color.New(color.FgYellow).Sprintf(s)
+	case "blue":
+		return color.New(color.FgBlue).Sprintf(s)
+	case "magenta":
+		return color.New(color.FgMagenta).Sprintf(s)
+	case "cyan":
+		return color.New(color.FgCyan).Sprintf(s)
+	default:
+		return s
+	}
+}
+
 // ========== Error Exit ==========
 
 func Error(msg string, err error) {

@@ -101,18 +101,16 @@ func (b *DefaultBenchmarkerImpl) Run(req *types.PokeRequest, verbose bool) types
 
 func printBenchmarkResults(res types.BenchmarkResult, totalTime float64, req *types.PokeRequest) {
 	fmt.Println()
-	fmt.Println("===================================")
-	fmt.Println("       --- Poke Benchmark ---      ")
-	fmt.Println("===================================")
-	fmt.Printf("Requests:      %d\n", res.Total)
-	fmt.Printf("Success:       %d\n", res.Successes)
-	fmt.Printf("Failures:      %d\n", res.Failures)
-	fmt.Printf("Total time:    %.2fs\n", totalTime)
+	fmt.Println("╭──────────── Poke Benchmark ────────────╮")
+	fmt.Printf("│ Requests       %-23d │\n", res.Total)
+	fmt.Printf("│ Success        %-32s │\n", util.ColorString(fmt.Sprintf("%d", res.Successes), "green"))
+	fmt.Printf("│ Failures       %-32s │\n", util.ColorString(fmt.Sprintf("%d", res.Failures), "red"))
+	fmt.Printf("│ Total time     %-.2fs%18s │\n", totalTime, "")
 
 	if len(res.Durations) == 0 {
-		fmt.Println("Avg duration:  N/A")
-		fmt.Println("Min:           N/A")
-		fmt.Println("Max:           N/A")
+		fmt.Printf("│ Avg duration   %-23s │\n", "N/A")
+		fmt.Printf("│ Min            %-23s │\n", "N/A")
+		fmt.Printf("│ Max            %-23s │\n", "N/A")
 	} else {
 		min, max := res.Durations[0], res.Durations[0]
 		var sum time.Duration
@@ -126,13 +124,13 @@ func printBenchmarkResults(res types.BenchmarkResult, totalTime float64, req *ty
 			sum += d
 		}
 		avg := sum / time.Duration(len(res.Durations))
-		fmt.Printf("Avg duration:  %v\n", avg)
-		fmt.Printf("Min:           %v\n", min)
-		fmt.Printf("Max:           %v\n", max)
+		fmt.Printf("│ Avg duration   %-23v │\n", avg)
+		fmt.Printf("│ Min            %-32s │\n", util.ColorString(min.String(), "blue"))
+		fmt.Printf("│ Max            %-32s │\n", util.ColorString(max.String(), "yellow"))
 	}
 
 	throughput := float64(res.Total) / totalTime
-	fmt.Printf("Throughput:    %.2f req/sec\n", throughput)
-	fmt.Printf("Workers:       %d\n", req.Workers)
-	fmt.Println("===================================")
+	fmt.Printf("│ Throughput     %-.2f req/s%12s │\n", throughput, "")
+	fmt.Printf("│ Workers        %-23d │\n", req.Workers)
+	fmt.Println("╰────────────────────────────────────────╯")
 }
