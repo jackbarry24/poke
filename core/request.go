@@ -38,12 +38,15 @@ func (r *DefaultRequestRunnerImpl) RunSingleRequest(req *types.PokeRequest, verb
 	resp, err := r.Send(req)
 	duration := time.Since(start).Seconds()
 	if err != nil {
-		return fmt.Errorf("request failed: %w", err)
+		util.Error("Request failed", err)
 	}
 	defer resp.Raw.Body.Close()
 
-	if req.ExpectStatus > 0 && resp.StatusCode != req.ExpectStatus {
-		return fmt.Errorf("unexpected status code: expected %d, got %d", req.ExpectStatus, resp.StatusCode)
+	if req.Assert != nil {
+		ok, err := util.AssertResponse(resp, req.Assert)
+		if !ok {
+			util.Error("Assertion failed", err)
+		}
 	}
 
 	if verbose {

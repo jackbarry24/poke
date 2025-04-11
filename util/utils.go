@@ -60,6 +60,31 @@ func PrintBody(body []byte, contentType string) {
 	}
 }
 
+func AssertResponse(resp *types.PokeResponse, assertions *types.Assertions) (bool, error) {
+	if assertions.Status != 0 && resp.StatusCode != assertions.Status {
+		return false, fmt.Errorf("expected status %d, got %d", assertions.Status, resp.StatusCode)
+	}
+
+	if assertions.BodyContains != "" && !strings.Contains(string(resp.Body), assertions.BodyContains) {
+		return false, fmt.Errorf("expected body to contain %q, got %q", assertions.BodyContains, string(resp.Body))
+	}
+
+	for k, v := range assertions.Headers {
+		vals, ok := resp.Header[k]
+		if !ok {
+			return false, fmt.Errorf("expected header %q to be %q, but it is missing", k, v)
+		}
+		if len(vals) == 0 {
+			return false, fmt.Errorf("expected header %q to be %q, but it is empty", k, v)
+		}
+		if vals[0] != v {
+			return false, fmt.Errorf("expected header %q to be %q, got %q", k, v, vals)
+		}
+	}
+
+	return true, nil
+}
+
 // ========== CLI Helpers ==========
 
 func ParseHeaders(headerStr string) map[string]string {

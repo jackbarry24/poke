@@ -57,9 +57,12 @@ func (b *DefaultBenchmarkerImpl) Run(req *types.PokeRequest, verbose bool) types
 				}
 				resp.Raw.Body.Close()
 
-				if req.ExpectStatus > 0 && resp.StatusCode != req.ExpectStatus {
-					errorChan <- true
-					continue
+				if req.Assert != nil {
+					ok, _ := util.AssertResponse(resp, req.Assert)
+					if !ok {
+						errorChan <- true
+						continue
+					}
 				}
 
 				errorChan <- false

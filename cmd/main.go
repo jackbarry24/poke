@@ -46,17 +46,17 @@ func main() {
 	}
 
 	req := &types.PokeRequest{
-		Method:       opts.Method,
-		URL:          url,
-		Headers:      headers,
-		QueryParams:  queryParams,
-		Body:         payload,
-		BodyFile:     opts.DataFile,
-		BodyStdin:    false,
-		CreatedAt:    time.Now(),
-		Workers:      opts.Workers,
-		Repeat:       opts.Repeat,
-		ExpectStatus: opts.ExpectStatus,
+		Method:      opts.Method,
+		URL:         url,
+		Headers:     headers,
+		QueryParams: queryParams,
+		Body:        payload,
+		BodyFile:    opts.DataFile,
+		BodyStdin:   false,
+		Meta:        &types.Meta{CreatedAt: time.Now()},
+		Workers:     opts.Workers,
+		Repeat:      opts.Repeat,
+		Assert:      &types.Assertions{Status: opts.ExpectStatus},
 	}
 
 	if opts.UserAgent != "" {

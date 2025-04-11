@@ -22,18 +22,17 @@ type CLIOptions struct {
 }
 
 type PokeRequest struct {
-	Method       string
-	URL          string
-	Headers      map[string]string
-	QueryParams  map[string]string
-	Body         string
-	BodyFile     string
-	BodyStdin    bool
-	CreatedAt    time.Time
-	Meta         *Meta
-	Repeat       int
-	Workers      int
-	ExpectStatus int
+	Method      string
+	URL         string
+	Headers     map[string]string
+	QueryParams map[string]string
+	Body        string
+	BodyFile    string
+	BodyStdin   bool
+	Meta        *Meta
+	Repeat      int
+	Workers     int
+	Assert      *Assertions
 }
 
 type PokeResponse struct {
@@ -44,7 +43,14 @@ type PokeResponse struct {
 	Raw         *http.Response
 }
 
+type Assertions struct {
+	Status       int
+	BodyContains string
+	Headers      map[string]string
+}
+
 type Meta struct {
+	CreatedAt   time.Time
 	Description string
 	Tags        []string
 }
