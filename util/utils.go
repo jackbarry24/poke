@@ -14,23 +14,6 @@ import (
 	"github.com/fatih/color"
 )
 
-// // ========== Request I/O ==========
-
-// func ResolveRequestPath(input string) string {
-// 	if strings.Contains(input, "/") {
-// 		return input
-// 	}
-
-// 	home, err := os.UserHomeDir()
-// 	if err != nil {
-// 		return input
-// 	}
-
-// 	dir := filepath.Join(home, ".poke")
-// 	_ = os.MkdirAll(dir, 0755)
-// 	return filepath.Join(dir, input)
-// }
-
 // ========== Response Output ==========
 
 func ReadResponse(resp *http.Response) ([]byte, error) {
@@ -138,23 +121,23 @@ func ColorStatus(code int) string {
 func ColorString(s string, colorName string) string {
 	switch colorName {
 	case "red":
-		return color.New(color.FgRed).Sprintf(s)
+		return color.New(color.FgRed).Sprintf("%s", s)
 	case "green":
-		return color.New(color.FgGreen).Sprintf(s)
+		return color.New(color.FgGreen).Sprintf("%s", s)
 	case "yellow":
-		return color.New(color.FgYellow).Sprintf(s)
+		return color.New(color.FgYellow).Sprintf("%s", s)
 	case "blue":
-		return color.New(color.FgBlue).Sprintf(s)
+		return color.New(color.FgBlue).Sprintf("%s", s)
 	case "magenta":
-		return color.New(color.FgMagenta).Sprintf(s)
+		return color.New(color.FgMagenta).Sprintf("%s", s)
 	case "cyan":
-		return color.New(color.FgCyan).Sprintf(s)
+		return color.New(color.FgCyan).Sprintf("%s", s)
 	default:
 		return s
 	}
 }
 
-// ========== Error Exit ==========
+// ========== Helpers ==========
 
 func Error(msg string, err error) {
 	if err == nil {
