@@ -32,9 +32,9 @@ func PrintResponseVerbose(resp *types.PokeResponse, req *types.PokeRequest, body
 	fmt.Printf("Response Size:      %d bytes\n", len(body))
 	fmt.Printf("Content-Type:       %s\n", resp.ContentType)
 
-	if len(resp.Header) > 0 {
+	if len(resp.Headers) > 0 {
 		fmt.Println("\nResponse Headers:")
-		for k, v := range resp.Header {
+		for k, v := range resp.Headers {
 			fmt.Printf("  %s: %s\n", k, strings.Join(v, ", "))
 		}
 	}
@@ -70,7 +70,7 @@ func AssertResponse(resp *types.PokeResponse, assertions *types.Assertions) (boo
 	}
 
 	for k, v := range assertions.Headers {
-		vals, ok := resp.Header[k]
+		vals, ok := resp.Headers[k]
 		if !ok {
 			return false, fmt.Errorf("expected header %q to be %q, but it is missing", k, v)
 		}

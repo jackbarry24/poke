@@ -21,26 +21,27 @@ type CLIOptions struct {
 	Help         bool
 }
 
-type PokeRequest struct {
-	Method      string
-	URL         string
-	Headers     map[string]string
-	QueryParams map[string]string
-	Body        string
-	BodyFile    string
-	BodyStdin   bool
-	Meta        *Meta
-	Repeat      int
-	Workers     int
-	Assert      *Assertions
+type PokeResponse struct {
+	StatusCode  int                 `json:"status_code"`
+	Headers     map[string][]string `json:"headers"`
+	Body        []byte              `json:"body"`
+	ContentType string              `json:"content_type"`
+	Raw         *http.Response      `json:"-"` // not serializable
+	Timestamp   time.Time           `json:"timestamp"`
 }
 
-type PokeResponse struct {
-	StatusCode  int
-	Header      map[string][]string
-	Body        []byte
-	ContentType string
-	Raw         *http.Response
+type PokeRequest struct {
+	Method      string            `json:"method"`
+	URL         string            `json:"url"`
+	Headers     map[string]string `json:"headers"`
+	QueryParams map[string]string `json:"query_params"`
+	Body        string            `json:"body"`
+	BodyFile    string            `json:"body_file"`
+	BodyStdin   bool              `json:"body_stdin"`
+	Meta        *Meta             `json:"meta"`
+	Repeat      int               `json:"repeat"`
+	Workers     int               `json:"workers"`
+	Assert      *Assertions       `json:"assert"`
 }
 
 type Assertions struct {

@@ -20,7 +20,8 @@ type RequestRunner interface {
 	RunBenchmark(req *types.PokeRequest, verbose bool) error
 	RunSingleRequest(req *types.PokeRequest, verbose bool) error
 	Route(path string, verbose bool) error
-	Save(req *types.PokeRequest, saveAs string) error
+	SaveRequest(req *types.PokeRequest, saveAs string) error
+	SaveResponse(resp *types.PokeResponse) error
 	Load(path string) (*types.PokeRequest, error)
 }
 
@@ -36,6 +37,12 @@ func (r *DefaultRequestRunnerImpl) Execute(req *types.PokeRequest, verbose bool)
 func (r *DefaultRequestRunnerImpl) RunSingleRequest(req *types.PokeRequest, verbose bool) error {
 	start := time.Now()
 	resp, err := r.Send(req)
+	if err != nil {
+		util.Error("Request failed", err)
+	}
+	if err := r.SaveResponse(resp); err != nil {
+		util.Error("Failed to save response", err)
+	}
 	duration := time.Since(start).Seconds()
 	if err != nil {
 		util.Error("Request failed", err)
@@ -88,14 +95,15 @@ func (r *DefaultRequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResp
 
 	return &types.PokeResponse{
 		StatusCode:  resp.StatusCode,
-		Header:      resp.Header,
+		Headers:     resp.Header,
 		Body:        bodyBytes,
 		ContentType: resp.Header.Get("Content-Type"),
 		Raw:         resp,
+		Timestamp:   time.Now(),
 	}, nil
 }
 
-func (r *DefaultRequestRunnerImpl) Save(req *types.PokeRequest, path string) error {
+func (r *DefaultRequestRunnerImpl) SaveRequest(req *types.PokeRequest, path string) error {
 	if req.BodyFile != "" {
 		req.Body = ""
 	}
@@ -123,11 +131,26 @@ func (r *DefaultRequestRunnerImpl) Save(req *types.PokeRequest, path string) err
 	return os.WriteFile(path, out, 0644)
 }
 
-// Route handles if the request should be treated as a single request or a collection of requests
+func (r *DefaultRequestRunnerImpl) SaveResponse(resp *types.PokeResponse) error {
+	if resp == nil {
+		return fmt.Errorf("response is nil")
+	}
+
+	out, err := json.MarshalIndent(resp, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(homeDir, ".poke", "tmp_poke_latest.json"), out, 0644)
+}
+
 func (r *DefaultRequestRunnerImpl) Route(path string, verbose bool) error {
 	resolver := &DefaultPayloadResolverImpl{}
 
-	// Is this a single .json file?
 	if strings.HasSuffix(path, ".json") {
 		if _, err := os.Stat(path); err == nil {
 			req, err := r.Load(path)
@@ -145,7 +168,6 @@ func (r *DefaultRequestRunnerImpl) Route(path string, verbose bool) error {
 		}
 	}
 
-	// Try treating as a collection
 	paths, err := walkPath(path)
 	if err != nil {
 		return fmt.Errorf("could not resolve collection: %w", err)
@@ -204,7 +226,8 @@ func (r *DefaultRequestRunnerImpl) Load(path string) (*types.PokeRequest, error)
 	}
 
 	templater := &DefaultTemplateEngineImpl{}
-	templater.ApplyRequest(&req, map[string]string{})
+	templater.LoadHistory()
+	templater.ApplyToRequest(&req)
 	return &req, nil
 }
 

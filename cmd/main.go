@@ -12,11 +12,12 @@ import (
 )
 
 func main() {
-	templater := &core.DefaultTemplateEngineImpl{}
+	// templater := &core.DefaultTemplateEngineImpl{}
 	payloadResolver := &core.DefaultPayloadResolverImpl{}
 	requestRunner := &core.DefaultRequestRunnerImpl{}
 
-	templater.LoadEnv()
+	// templater.LoadEnv()
+	ensurePokeDir()
 	opts := parseCLIOptions()
 	args := flag.Args()
 
@@ -64,7 +65,7 @@ func main() {
 	}
 
 	if opts.SavePath != "" {
-		if err := requestRunner.Save(req, opts.SavePath); err != nil {
+		if err := requestRunner.SaveRequest(req, opts.SavePath); err != nil {
 			util.Error("Failed to save request", err)
 		}
 		fmt.Printf("Request saved to %s\n", opts.SavePath)
@@ -117,5 +118,28 @@ func handleSend(args []string, opts *types.CLIOptions, handler core.RequestRunne
 
 	if err := handler.Route(args[1], opts.Verbose); err != nil {
 		util.Error("Failed to send request(s)", err)
+	}
+}
+
+func ensurePokeDir() {
+	homedir, err := os.UserHomeDir()
+	if err != nil {
+		util.Error("Failed to get home directory", err)
+	}
+	pokeDir := fmt.Sprintf("%s/.poke", homedir)
+	if _, err := os.Stat(pokeDir); os.IsNotExist(err) {
+		err := os.MkdirAll(pokeDir, os.ModePerm)
+		if err != nil {
+			util.Error("Failed to create .poke directory", err)
+		}
+	}
+
+	tmpFilePath := fmt.Sprintf("%s/tmp_poke_latest.json", pokeDir)
+	if _, err := os.Stat(tmpFilePath); os.IsNotExist(err) {
+		file, err := os.Create(tmpFilePath)
+		if err != nil {
+			util.Error("Failed to create tmp_poke_latest.json file", err)
+		}
+		defer file.Close()
 	}
 }
