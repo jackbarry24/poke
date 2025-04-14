@@ -132,15 +132,25 @@ func (t *DefaultTemplateEngineImpl) ApplyToRequest(req *types.PokeRequest) {
 	req.Body = t.Apply(req.Body)
 	req.BodyFile = t.Apply(req.BodyFile)
 
-	newHeaders := make(map[string]string)
+	newHeaders := make(map[string][]string)
 	for k, v := range req.Headers {
-		newHeaders[t.Apply(k)] = t.Apply(v)
+		newKey := t.Apply(k)
+		newValues := []string{}
+		for _, value := range v {
+			newValues = append(newValues, t.Apply(value))
+		}
+		newHeaders[newKey] = newValues
 	}
 	req.Headers = newHeaders
 
-	newQueryParams := make(map[string]string)
+	newQueryParams := make(map[string][]string)
 	for k, v := range req.QueryParams {
-		newQueryParams[t.Apply(k)] = t.Apply(v)
+		newKey := t.Apply(k)
+		newValues := []string{}
+		for _, value := range v {
+			newValues = append(newValues, t.Apply(value))
+		}
+		newQueryParams[newKey] = newValues
 	}
 	req.QueryParams = newQueryParams
 }

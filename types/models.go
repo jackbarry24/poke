@@ -31,17 +31,17 @@ type PokeResponse struct {
 }
 
 type PokeRequest struct {
-	Method      string            `json:"method"`
-	URL         string            `json:"url"`
-	Headers     map[string]string `json:"headers"`
-	QueryParams map[string]string `json:"query_params"`
-	Body        string            `json:"body"`
-	BodyFile    string            `json:"body_file"`
-	BodyStdin   bool              `json:"body_stdin"`
-	Meta        *Meta             `json:"meta"`
-	Repeat      int               `json:"repeat"`
-	Workers     int               `json:"workers"`
-	Assert      *Assertions       `json:"assert"`
+	Method      string              `json:"method"`
+	URL         string              `json:"url"`
+	Headers     map[string][]string `json:"headers"`
+	QueryParams map[string][]string `json:"query_params"`
+	Body        string              `json:"body"`
+	BodyFile    string              `json:"body_file"`
+	BodyStdin   bool                `json:"body_stdin"`
+	Meta        *Meta               `json:"meta"`
+	Repeat      int                 `json:"repeat"`
+	Workers     int                 `json:"workers"`
+	Assert      *Assertions         `json:"assert"`
 }
 
 type Assertions struct {

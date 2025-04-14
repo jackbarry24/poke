@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -13,8 +14,6 @@ import (
 	"github.com/TylerBrock/colorjson"
 	"github.com/fatih/color"
 )
-
-// ========== Response Output ==========
 
 func ReadResponse(resp *http.Response) ([]byte, error) {
 	return io.ReadAll(resp.Body)
@@ -85,46 +84,33 @@ func AssertResponse(resp *types.PokeResponse, assertions *types.Assertions) (boo
 	return true, nil
 }
 
-// ========== CLI Helpers ==========
-
-func ParseHeaders(headerStr string) map[string]string {
-	headers := make(map[string]string)
+func ParseHeaders(headerStr string) map[string][]string {
+	headers := make(map[string][]string)
 	if headerStr == "" {
 		return headers
 	}
-	pairs := strings.Split(headerStr, ",")
+	// Expect input like: "Key1:Value1;Key2:Value2"
+	pairs := strings.Split(headerStr, ";")
 	for _, pair := range pairs {
 		kv := strings.SplitN(pair, ":", 2)
 		if len(kv) == 2 {
 			key := strings.TrimSpace(kv[0])
 			val := strings.TrimSpace(kv[1])
-			headers[key] = val
+			headers[key] = append(headers[key], val)
 		}
 	}
 	return headers
 }
 
-func ParseQueryParams(url string) map[string]string {
-	queryParams := make(map[string]string)
-	if strings.Contains(url, "?") {
-		parts := strings.Split(url, "?")
-		if len(parts) > 1 {
-			queryStr := parts[1]
-			pairs := strings.Split(queryStr, "&")
-			for _, pair := range pairs {
-				kv := strings.SplitN(pair, "=", 2)
-				if len(kv) == 2 {
-					key := strings.TrimSpace(kv[0])
-					val := strings.TrimSpace(kv[1])
-					queryParams[key] = val
-				}
-			}
-		}
+func ParseQueryParams(rawURL string) map[string][]string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return map[string][]string{}
 	}
-	return queryParams
+	return u.Query()
 }
 
-func MergeHeaders(base, extra map[string]string) {
+func MergeHeaders(base, extra map[string][]string) {
 	for k, v := range extra {
 		base[k] = v
 	}
@@ -161,8 +147,6 @@ func ColorString(s string, colorName string) string {
 		return s
 	}
 }
-
-// ========== Helpers ==========
 
 func Error(msg string, err error) {
 	if err == nil {

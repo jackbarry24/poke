@@ -59,7 +59,7 @@ func main() {
 	}
 
 	if opts.UserAgent != "" {
-		req.Headers["User-Agent"] = opts.UserAgent
+		req.Headers["User-Agent"] = []string{"poke/1.0"}
 	}
 
 	if req.Body != "" || req.BodyFile != "" || req.BodyStdin {

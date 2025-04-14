@@ -80,7 +80,7 @@ func (r *DefaultRequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResp
 	}
 
 	for k, v := range req.Headers {
-		httpReq.Header.Set(k, v)
+		httpReq.Header.Set(k, strings.Join(v, ","))
 	}
 
 	resp, err := client.Do(httpReq)
