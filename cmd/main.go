@@ -12,17 +12,15 @@ import (
 )
 
 func main() {
-	// templater := &core.DefaultTemplateEngineImpl{}
 	payloadResolver := &core.DefaultPayloadResolverImpl{}
 	requestRunner := &core.DefaultRequestRunnerImpl{}
 
-	// templater.LoadEnv()
 	ensurePokeDir()
 	opts := parseCLIOptions()
 	args := flag.Args()
 
 	switch {
-	case len(args) > 0 && args[0] == "run":
+	case len(args) > 0 && args[0] == "send":
 		handleSend(args, opts, requestRunner)
 		return
 	case opts.Help:
@@ -62,6 +60,10 @@ func main() {
 
 	if opts.UserAgent != "" {
 		req.Headers["User-Agent"] = opts.UserAgent
+	}
+
+	if req.Body != "" || req.BodyFile != "" || req.BodyStdin {
+		req.Method = "POST"
 	}
 
 	if opts.SavePath != "" {
@@ -106,17 +108,17 @@ func parseCLIOptions() *types.CLIOptions {
 func printUsage() {
 	fmt.Println("Usage: poke [command] [options] <args>")
 	fmt.Println("Commands:")
-	fmt.Println("  run <path>  Send request(s) from a file/directory")
+	fmt.Println("  send  <path>  Send request(s) from a file/directory")
 	flag.PrintDefaults()
 }
 
 func handleSend(args []string, opts *types.CLIOptions, handler core.RequestRunner) {
 	if opts.Help || len(args) < 2 {
-		fmt.Println("Usage: poke run <path>")
+		fmt.Println("Usage: poke send <path>")
 		os.Exit(1)
 	}
 
-	if err := handler.Route(args[1], opts.Verbose); err != nil {
+	if err := handler.Collect(args[1], opts.Verbose); err != nil {
 		util.Error("Failed to send request(s)", err)
 	}
 }

@@ -173,7 +173,9 @@ func Error(msg string, err error) {
 	os.Exit(1)
 }
 
-func Debug(msg string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, "[Debug] "+msg+"\n", args...)
-	println()
+func Debug(module string, msg string) {
+	debug := strings.ToLower(strings.TrimSpace(os.Getenv("DEBUG")))
+	if debug == "1" || debug == "true" {
+		fmt.Fprintf(os.Stderr, "[%s] %s\n", module, msg)
+	}
 }

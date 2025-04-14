@@ -19,7 +19,7 @@ type RequestRunner interface {
 	Send(req *types.PokeRequest) (*types.PokeResponse, error)
 	RunBenchmark(req *types.PokeRequest, verbose bool) error
 	RunSingleRequest(req *types.PokeRequest, verbose bool) error
-	Route(path string, verbose bool) error
+	Collect(path string, verbose bool) error
 	SaveRequest(req *types.PokeRequest, saveAs string) error
 	SaveResponse(resp *types.PokeResponse) error
 	Load(path string) (*types.PokeRequest, error)
@@ -148,7 +148,7 @@ func (r *DefaultRequestRunnerImpl) SaveResponse(resp *types.PokeResponse) error 
 	return os.WriteFile(filepath.Join(homeDir, ".poke", "tmp_poke_latest.json"), out, 0644)
 }
 
-func (r *DefaultRequestRunnerImpl) Route(path string, verbose bool) error {
+func (r *DefaultRequestRunnerImpl) Collect(path string, verbose bool) error {
 	resolver := &DefaultPayloadResolverImpl{}
 
 	if strings.HasSuffix(path, ".json") {

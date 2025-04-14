@@ -1,16 +1,15 @@
 package core
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
-	"text/template"
 
 	"poke/types"
+	"poke/util"
 
 	"github.com/joho/godotenv"
 )
@@ -26,28 +25,29 @@ type DefaultTemplateEngineImpl struct {
 	dotenv  map[string]string
 }
 
+var templateExpr = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}`)
+
 func (t *DefaultTemplateEngineImpl) LoadHistory() error {
-	homedir, err := os.UserHomeDir()
+	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-	pokePath := filepath.Join(homedir, ".poke", "tmp_poke_latest.json")
-	file, err := os.Open(pokePath)
+
+	pokePath := filepath.Join(homeDir, ".poke", "tmp_poke_latest.json")
+	data, err := os.ReadFile(pokePath)
 	if err != nil {
-		return nil // No-op if no history
+		return nil
 	}
-	defer file.Close()
 
 	var raw map[string]interface{}
-	if err := json.NewDecoder(file).Decode(&raw); err != nil {
+	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 
-	// Unmarshal body if JSON
-	if bodyStr, ok := raw["Body"].(string); ok {
+	if bodyStr, ok := raw["body"].(string); ok {
 		var parsed interface{}
 		if err := json.Unmarshal([]byte(bodyStr), &parsed); err == nil {
-			raw["Body"] = parsed
+			raw["body"] = parsed
 		}
 	}
 
@@ -55,70 +55,79 @@ func (t *DefaultTemplateEngineImpl) LoadHistory() error {
 	return nil
 }
 
-var templateExpr = regexp.MustCompile(`{{\s*([a-zA-Z0-9_.]+)\s*}}`)
+func (t *DefaultTemplateEngineImpl) getEnvValue(key string) string {
+	if t.dotenv == nil {
+		envMap, err := godotenv.Read(".env")
+		if err != nil {
+			envMap = map[string]string{}
+		}
+		t.dotenv = envMap
+	}
+
+	if val, ok := t.dotenv[key]; ok && val != "" {
+		return val
+	}
+
+	val := os.Getenv(key)
+	if val != "" {
+		t.dotenv[key] = val
+	}
+	return val
+}
 
 func (t *DefaultTemplateEngineImpl) Apply(input string) string {
 	if input == "" {
 		return ""
 	}
 
-	ctx := map[string]interface{}{
-		"env":     make(map[string]string),
-		"history": t.history,
-	}
-
-	// Find used env vars and load only those
-	matches := templateExpr.FindAllStringSubmatch(input, -1)
-	seenEnv := map[string]bool{}
-	for _, match := range matches {
-		path := match[1]
-		if strings.HasPrefix(path, "env.") {
-			key := strings.TrimPrefix(path, "env.")
-			if _, exists := seenEnv[key]; !exists {
-				seenEnv[key] = true
-				val := t.getEnvValue(key)
-				fmt.Printf("[env] %s = %q\n", key, val)
-				ctx["env"].(map[string]string)[key] = val
+	result := templateExpr.ReplaceAllStringFunc(input, func(match string) string {
+		parts := templateExpr.FindStringSubmatch(match)
+		if len(parts) < 2 {
+			return match
+		}
+		key := parts[1]
+		if strings.HasPrefix(key, "env.") {
+			envKey := strings.TrimPrefix(key, "env.")
+			val := t.getEnvValue(envKey)
+			util.Debug("template", fmt.Sprintf("Env %s = %q", envKey, val))
+			return val
+		}
+		if strings.HasPrefix(key, "history.") {
+			historyKey := strings.TrimPrefix(key, "history.")
+			if err := t.LoadHistory(); err != nil {
+				util.Debug("template", fmt.Sprintf("History load error: %s", err))
+				return match
+			}
+			parts := strings.Split(historyKey, ".")
+			var current interface{} = t.history
+			for _, part := range parts {
+				if m, ok := current.(map[string]interface{}); ok {
+					current = m[part]
+				} else {
+					return match
+				}
+			}
+			if str, ok := current.(string); ok {
+				return str
+			} else {
+				bytes, err := json.Marshal(current)
+				if err == nil {
+					return string(bytes)
+				}
+				return match
 			}
 		}
-	}
+		return match
+	})
 
-	fmt.Println("[tmpl] Template context: env =", ctx["env"])
-
-	tmpl, err := template.New("poke").Parse(input)
-	if err != nil {
-		fmt.Println("[tmpl] Parse error:", err)
-		return input
-	}
-
-	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, ctx)
-	if err != nil {
-		fmt.Println("[tmpl] Exec error:", err)
-		return input
-	}
-
-	fmt.Printf("[tmpl] Rendered: %q -> %q\n", input, buf.String())
-	return buf.String()
-}
-
-func (t *DefaultTemplateEngineImpl) getEnvValue(key string) string {
-	val := os.Getenv(key)
-	if val != "" {
-		return val
-	}
-
-	if t.dotenv == nil {
-		t.dotenv, _ = godotenv.Read(".env")
-	}
-	return t.dotenv[key]
+	util.Debug("template", fmt.Sprintf("Rendered: %q -> %q", input, result))
+	return result
 }
 
 func (t *DefaultTemplateEngineImpl) ApplyToRequest(req *types.PokeRequest) {
 	if req == nil {
 		return
 	}
-
 	req.URL = t.Apply(req.URL)
 	req.Body = t.Apply(req.Body)
 	req.BodyFile = t.Apply(req.BodyFile)
