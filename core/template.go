@@ -1,42 +1,62 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
+	"text/template"
 
 	"poke/types"
-	"poke/util"
+	//"poke/util"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/joho/godotenv"
 )
 
+type TemplateContext struct {
+	Env     map[string]string
+	History map[string]interface{}
+}
+
 type TemplateEngine interface {
+	LoadEnv()
 	LoadHistory() error
-	Apply(input string) string
-	ApplyToRequest(req *types.PokeRequest)
+	RenderRequest(path string) (*types.PokeRequest, error)
 }
 
-type DefaultTemplateEngineImpl struct {
+type TemplateEngineImpl struct {
+	env     map[string]string
 	history map[string]interface{}
-	dotenv  map[string]string
 }
 
-var templateExpr = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}`)
-
-func (t *DefaultTemplateEngineImpl) LoadHistory() error {
+func (t *TemplateEngineImpl) LoadEnv() {
+	if t.env != nil {
+		return
+	}
+	envMap, err := godotenv.Read(".env")
+	if err != nil {
+		envMap = map[string]string{}
+	}
+	// Merge with actual environment
+	for _, kv := range os.Environ() {
+		parts := bytes.SplitN([]byte(kv), []byte("="), 2)
+		if len(parts) == 2 {
+			envMap[string(parts[0])] = string(parts[1])
+		}
+	}
+	t.env = envMap
+}
+func (t *TemplateEngineImpl) LoadHistory() error {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-
 	pokePath := filepath.Join(homeDir, ".poke", "tmp_poke_latest.json")
 	data, err := os.ReadFile(pokePath)
 	if err != nil {
-		return nil
+		return nil // skip if not present
 	}
 
 	var raw map[string]interface{}
@@ -55,102 +75,32 @@ func (t *DefaultTemplateEngineImpl) LoadHistory() error {
 	return nil
 }
 
-func (t *DefaultTemplateEngineImpl) getEnvValue(key string) string {
-	if t.dotenv == nil {
-		envMap, err := godotenv.Read(".env")
-		if err != nil {
-			envMap = map[string]string{}
-		}
-		t.dotenv = envMap
+func (t *TemplateEngineImpl) RenderRequest(data []byte) (*types.PokeRequest, error) {
+	t.LoadEnv()
+	if err := t.LoadHistory(); err != nil {
+		return nil, fmt.Errorf("load history: %w", err)
 	}
 
-	if val, ok := t.dotenv[key]; ok && val != "" {
-		return val
+	tmpl, err := template.New("poke").
+		Funcs(sprig.TxtFuncMap()).
+		Parse(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("template parse: %w", err)
 	}
 
-	val := os.Getenv(key)
-	if val != "" {
-		t.dotenv[key] = val
-	}
-	return val
-}
-
-func (t *DefaultTemplateEngineImpl) Apply(input string) string {
-	if input == "" {
-		return ""
-	}
-
-	result := templateExpr.ReplaceAllStringFunc(input, func(match string) string {
-		parts := templateExpr.FindStringSubmatch(match)
-		if len(parts) < 2 {
-			return match
-		}
-		key := parts[1]
-		if strings.HasPrefix(key, "env.") {
-			envKey := strings.TrimPrefix(key, "env.")
-			val := t.getEnvValue(envKey)
-			util.Debug("template", fmt.Sprintf("Env %s = %q", envKey, val))
-			return val
-		}
-		if strings.HasPrefix(key, "history.") {
-			historyKey := strings.TrimPrefix(key, "history.")
-			if err := t.LoadHistory(); err != nil {
-				util.Debug("template", fmt.Sprintf("History load error: %s", err))
-				return match
-			}
-			parts := strings.Split(historyKey, ".")
-			var current interface{} = t.history
-			for _, part := range parts {
-				if m, ok := current.(map[string]interface{}); ok {
-					current = m[part]
-				} else {
-					return match
-				}
-			}
-			if str, ok := current.(string); ok {
-				return str
-			} else {
-				bytes, err := json.Marshal(current)
-				if err == nil {
-					return string(bytes)
-				}
-				return match
-			}
-		}
-		return match
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, TemplateContext{
+		Env:     t.env,
+		History: t.history,
 	})
-
-	util.Debug("template", fmt.Sprintf("Rendered: %q -> %q", input, result))
-	return result
-}
-
-func (t *DefaultTemplateEngineImpl) ApplyToRequest(req *types.PokeRequest) {
-	if req == nil {
-		return
+	if err != nil {
+		return nil, fmt.Errorf("template exec: %w", err)
 	}
-	req.URL = t.Apply(req.URL)
-	req.Body = t.Apply(req.Body)
-	req.BodyFile = t.Apply(req.BodyFile)
 
-	newHeaders := make(map[string][]string)
-	for k, v := range req.Headers {
-		newKey := t.Apply(k)
-		newValues := []string{}
-		for _, value := range v {
-			newValues = append(newValues, t.Apply(value))
-		}
-		newHeaders[newKey] = newValues
+	var req types.PokeRequest
+	if err := json.Unmarshal(buf.Bytes(), &req); err != nil {
+		return nil, fmt.Errorf("unmarshal templated request: %w", err)
 	}
-	req.Headers = newHeaders
 
-	newQueryParams := make(map[string][]string)
-	for k, v := range req.QueryParams {
-		newKey := t.Apply(k)
-		newValues := []string{}
-		for _, value := range v {
-			newValues = append(newValues, t.Apply(value))
-		}
-		newQueryParams[newKey] = newValues
-	}
-	req.QueryParams = newQueryParams
+	return &req, nil
 }

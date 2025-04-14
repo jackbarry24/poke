@@ -47,7 +47,7 @@ type PokeRequest struct {
 type Assertions struct {
 	Status       int
 	BodyContains string
-	Headers      map[string]string
+	Headers      map[string][]string
 }
 
 type Meta struct {

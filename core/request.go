@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"poke/types"
@@ -25,17 +27,112 @@ type RequestRunner interface {
 	Load(path string) (*types.PokeRequest, error)
 }
 
-type DefaultRequestRunnerImpl struct{}
+type RequestRunnerImpl struct {
+	Tmpl *TemplateEngineImpl
+	Pyld *PayloadResolverImpl
+}
 
-func (r *DefaultRequestRunnerImpl) Execute(req *types.PokeRequest, verbose bool) error {
+func NewRequestRunner() *RequestRunnerImpl {
+	return &RequestRunnerImpl{
+		Tmpl: &TemplateEngineImpl{},
+		Pyld: &PayloadResolverImpl{},
+	}
+}
+
+func (r *RequestRunnerImpl) Execute(req *types.PokeRequest, verbose bool) error {
 	if req.Repeat > 1 {
 		return r.RunBenchmark(req, verbose)
 	}
 	return r.RunSingleRequest(req, verbose)
 }
 
-func (r *DefaultRequestRunnerImpl) RunSingleRequest(req *types.PokeRequest, verbose bool) error {
+func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest, verbose bool) error {
+	var wg sync.WaitGroup
+	resultChan := make(chan time.Duration, req.Repeat)
+	errorChan := make(chan bool, req.Repeat)
+
+	startTime := time.Now()
+
+	base := req.Repeat / req.Workers
+	remainder := req.Repeat % req.Workers
+	var counter int64
+
+	for i := 0; i < req.Workers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			workload := base
+			if workerID < remainder {
+				workload++
+			}
+			for j := 0; j < workload; j++ {
+				t0 := time.Now()
+				resp, err := r.Send(req)
+				duration := time.Since(t0)
+
+				reqNum := atomic.AddInt64(&counter, 1)
+				if verbose {
+					status := "ERR"
+					if err == nil {
+						status = util.ColorStatus(resp.StatusCode)
+					}
+					fmt.Printf("Request %-3d [Worker %-2d]: %-7s (%v)\n", reqNum, workerID, status, duration)
+				}
+
+				if err != nil {
+					errorChan <- true
+					continue
+				}
+				resp.Raw.Body.Close()
+
+				if req.Assert != nil {
+					ok, _ := util.AssertResponse(resp, req.Assert)
+					if !ok {
+						errorChan <- true
+						continue
+					}
+				}
+
+				errorChan <- false
+				resultChan <- duration
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	totalTime := time.Since(startTime)
+	close(resultChan)
+	close(errorChan)
+
+	var durations []time.Duration
+	var successes, failures int
+
+	for err := range errorChan {
+		if err {
+			failures++
+		} else {
+			successes++
+		}
+	}
+
+	for d := range resultChan {
+		durations = append(durations, d)
+	}
+
+	result := types.BenchmarkResult{
+		Total:     req.Repeat,
+		Successes: successes,
+		Failures:  failures,
+		Durations: durations,
+	}
+
+	util.PrintBenchmarkResults(result, totalTime.Seconds(), req)
+	return nil
+}
+
+func (r *RequestRunnerImpl) RunSingleRequest(req *types.PokeRequest, verbose bool) error {
 	start := time.Now()
+	util.Debug("runner", fmt.Sprintf("url: %s", req.URL))
 	resp, err := r.Send(req)
 	if err != nil {
 		util.Error("Request failed", err)
@@ -65,14 +162,7 @@ func (r *DefaultRequestRunnerImpl) RunSingleRequest(req *types.PokeRequest, verb
 	return nil
 }
 
-func (r *DefaultRequestRunnerImpl) RunBenchmark(req *types.PokeRequest, verbose bool) error {
-	bm := &DefaultBenchmarkerImpl{}
-	res := bm.Run(req, verbose)
-	_ = res
-	return nil
-}
-
-func (r *DefaultRequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, error) {
+func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, error) {
 	client := &http.Client{}
 	httpReq, err := http.NewRequest(req.Method, req.URL, bytes.NewBufferString(req.Body))
 	if err != nil {
@@ -103,7 +193,7 @@ func (r *DefaultRequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResp
 	}, nil
 }
 
-func (r *DefaultRequestRunnerImpl) SaveRequest(req *types.PokeRequest, path string) error {
+func (r *RequestRunnerImpl) SaveRequest(req *types.PokeRequest, path string) error {
 	if req.BodyFile != "" {
 		req.Body = ""
 	}
@@ -131,7 +221,7 @@ func (r *DefaultRequestRunnerImpl) SaveRequest(req *types.PokeRequest, path stri
 	return os.WriteFile(path, out, 0644)
 }
 
-func (r *DefaultRequestRunnerImpl) SaveResponse(resp *types.PokeResponse) error {
+func (r *RequestRunnerImpl) SaveResponse(resp *types.PokeResponse) error {
 	if resp == nil {
 		return fmt.Errorf("response is nil")
 	}
@@ -148,16 +238,14 @@ func (r *DefaultRequestRunnerImpl) SaveResponse(resp *types.PokeResponse) error 
 	return os.WriteFile(filepath.Join(homeDir, ".poke", "tmp_poke_latest.json"), out, 0644)
 }
 
-func (r *DefaultRequestRunnerImpl) Collect(path string, verbose bool) error {
-	resolver := &DefaultPayloadResolverImpl{}
-
+func (r *RequestRunnerImpl) Collect(path string, verbose bool) error {
 	if strings.HasSuffix(path, ".json") {
 		if _, err := os.Stat(path); err == nil {
 			req, err := r.Load(path)
 			if err != nil {
 				return fmt.Errorf("failed to load request: %w", err)
 			}
-			body, err := resolver.Resolve(req.Body, req.BodyFile, req.BodyStdin, false)
+			body, err := r.Pyld.Resolve(req.Body, req.BodyFile, req.BodyStdin, false)
 			if err != nil {
 				return fmt.Errorf("failed to resolve payload: %w", err)
 			}
@@ -187,8 +275,7 @@ func (r *DefaultRequestRunnerImpl) Collect(path string, verbose bool) error {
 			continue
 		}
 
-		payloadResolver := &DefaultPayloadResolverImpl{}
-		body, err := payloadResolver.Resolve(req.Body, req.BodyFile, req.BodyStdin, false)
+		body, err := r.Pyld.Resolve(req.Body, req.BodyFile, req.BodyStdin, false)
 		if err != nil {
 			fmt.Printf("Failed to resolve body for '%s': %v\n", path, err)
 			continue
@@ -206,29 +293,29 @@ func (r *DefaultRequestRunnerImpl) Collect(path string, verbose bool) error {
 	return nil
 }
 
-func (r *DefaultRequestRunnerImpl) Load(path string) (*types.PokeRequest, error) {
+func (r *RequestRunnerImpl) Load(path string) (*types.PokeRequest, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var req types.PokeRequest
-	if err := json.Unmarshal(data, &req); err != nil {
+
+	req, err := r.Tmpl.RenderRequest(data)
+	if err != nil {
 		return nil, err
 	}
 
 	if len(req.QueryParams) > 0 && !strings.Contains(req.URL, "?") {
 		query := "?"
-		for k, v := range req.QueryParams {
-			query += fmt.Sprintf("%s=%s&", k, v)
+		for k, vals := range req.QueryParams {
+			for _, v := range vals {
+				query += fmt.Sprintf("%s=%s&", k, v)
+			}
 		}
 		query = strings.TrimSuffix(query, "&")
 		req.URL += query
 	}
 
-	templater := &DefaultTemplateEngineImpl{}
-	templater.LoadHistory()
-	templater.ApplyToRequest(&req)
-	return &req, nil
+	return req, nil
 }
 
 func walkPath(path string) ([]string, error) {

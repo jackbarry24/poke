@@ -10,9 +10,9 @@ type PayloadResolver interface {
 	Resolve(data, dataFile string, dataStdin, edit bool) (string, error)
 }
 
-type DefaultPayloadResolverImpl struct{}
+type PayloadResolverImpl struct{}
 
-func (r *DefaultPayloadResolverImpl) Resolve(data, dataFile string, dataStdin, edit bool) (string, error) {
+func (r *PayloadResolverImpl) Resolve(data, dataFile string, dataStdin, edit bool) (string, error) {
 	sourceCount := 0
 	if data != "" {
 		sourceCount++

@@ -12,8 +12,7 @@ import (
 )
 
 func main() {
-	payloadResolver := &core.DefaultPayloadResolverImpl{}
-	requestRunner := &core.DefaultRequestRunnerImpl{}
+	runner := core.NewRequestRunner()
 
 	ensurePokeDir()
 	opts := parseCLIOptions()
@@ -21,7 +20,7 @@ func main() {
 
 	switch {
 	case len(args) > 0 && args[0] == "send":
-		handleSend(args, opts, requestRunner)
+		handleSend(args, opts, runner)
 		return
 	case opts.Help:
 		printUsage()
@@ -39,7 +38,7 @@ func main() {
 	url := args[0]
 	headers := util.ParseHeaders(opts.Headers)
 	queryParams := util.ParseQueryParams(url)
-	payload, err := payloadResolver.Resolve(opts.Data, opts.DataFile, opts.DataStdin, opts.Editor)
+	payload, err := runner.Pyld.Resolve(opts.Data, opts.DataFile, opts.DataStdin, opts.Editor)
 	if err != nil {
 		util.Error("Failed to resolve payload", err)
 	}
@@ -66,14 +65,16 @@ func main() {
 		req.Method = "POST"
 	}
 
+	fullURL := req.URL // save request will remove the query params
 	if opts.SavePath != "" {
-		if err := requestRunner.SaveRequest(req, opts.SavePath); err != nil {
+		if err := runner.SaveRequest(req, opts.SavePath); err != nil {
 			util.Error("Failed to save request", err)
 		}
 		fmt.Printf("Request saved to %s\n", opts.SavePath)
 	}
 
-	if err := requestRunner.Execute(req, opts.Verbose); err != nil {
+	req.URL = fullURL
+	if err := runner.Execute(req, opts.Verbose); err != nil {
 		util.Error("Failed to execute request", err)
 	}
 }

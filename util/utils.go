@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"poke/types"
 
@@ -59,6 +60,42 @@ func PrintBody(body []byte, contentType string) {
 	}
 }
 
+func PrintBenchmarkResults(res types.BenchmarkResult, totalTime float64, req *types.PokeRequest) {
+	fmt.Println()
+	fmt.Println("╭──────────── Poke Benchmark ────────────╮")
+	fmt.Printf("│ Requests       %-23d │\n", res.Total)
+	fmt.Printf("│ Success        %-32s │\n", ColorString(fmt.Sprintf("%d", res.Successes), "green"))
+	fmt.Printf("│ Failures       %-32s │\n", ColorString(fmt.Sprintf("%d", res.Failures), "red"))
+	fmt.Printf("│ Total time     %-.2fs%18s │\n", totalTime, "")
+
+	if len(res.Durations) == 0 {
+		fmt.Printf("│ Avg duration   %-23s │\n", "N/A")
+		fmt.Printf("│ Min            %-23s │\n", "N/A")
+		fmt.Printf("│ Max            %-23s │\n", "N/A")
+	} else {
+		min, max := res.Durations[0], res.Durations[0]
+		var sum time.Duration
+		for _, d := range res.Durations {
+			if d < min {
+				min = d
+			}
+			if d > max {
+				max = d
+			}
+			sum += d
+		}
+		avg := sum / time.Duration(len(res.Durations))
+		fmt.Printf("│ Avg duration   %-23v │\n", avg)
+		fmt.Printf("│ Min            %-32s │\n", ColorString(min.String(), "blue"))
+		fmt.Printf("│ Max            %-32s │\n", ColorString(max.String(), "yellow"))
+	}
+
+	throughput := float64(res.Total) / totalTime
+	fmt.Printf("│ Throughput     %-.2f req/s%13s │\n", throughput, "")
+	fmt.Printf("│ Workers        %-23d │\n", req.Workers)
+	fmt.Println("╰────────────────────────────────────────╯")
+}
+
 func AssertResponse(resp *types.PokeResponse, assertions *types.Assertions) (bool, error) {
 	if assertions.Status != 0 && resp.StatusCode != assertions.Status {
 		return false, fmt.Errorf("expected status %d, got %d", assertions.Status, resp.StatusCode)
@@ -68,16 +105,25 @@ func AssertResponse(resp *types.PokeResponse, assertions *types.Assertions) (boo
 		return false, fmt.Errorf("expected body to contain %q, got %q", assertions.BodyContains, string(resp.Body))
 	}
 
-	for k, v := range assertions.Headers {
-		vals, ok := resp.Headers[k]
+	for k, expectedVals := range assertions.Headers {
+		actualVals, ok := resp.Headers[k]
 		if !ok {
-			return false, fmt.Errorf("expected header %q to be %q, but it is missing", k, v)
+			return false, fmt.Errorf("expected header %q to be %q, but it is missing", k, strings.Join(expectedVals, ", "))
 		}
-		if len(vals) == 0 {
-			return false, fmt.Errorf("expected header %q to be %q, but it is empty", k, v)
+		if len(actualVals) == 0 {
+			return false, fmt.Errorf("expected header %q to be %q, but it is empty", k, strings.Join(expectedVals, ", "))
 		}
-		if vals[0] != v {
-			return false, fmt.Errorf("expected header %q to be %q, got %q", k, v, vals)
+		for _, expectedVal := range expectedVals {
+			found := false
+			for _, actualVal := range actualVals {
+				if actualVal == expectedVal {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false, fmt.Errorf("expected header %q to contain %q, but it was not found", k, expectedVal)
+			}
 		}
 	}
 
