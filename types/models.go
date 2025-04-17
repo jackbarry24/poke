@@ -16,6 +16,9 @@ type CLIOptions struct {
 	Repeat       int
 	Workers      int
 	ExpectStatus int
+	Retries      int
+	Backoff      int
+	DryRun       bool
 	Editor       bool
 	SavePath     string // save to .poke
 	Help         bool
@@ -39,6 +42,7 @@ type PokeRequest struct {
 	BodyFile    string              `json:"body_file"`
 	BodyStdin   bool                `json:"body_stdin"`
 	Meta        *Meta               `json:"meta"`
+	Retries     int                 `json:"retries"`
 	Repeat      int                 `json:"repeat"`
 	Workers     int                 `json:"workers"`
 	Assert      *Assertions         `json:"assert"`

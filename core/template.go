@@ -39,7 +39,7 @@ func (t *TemplateEngineImpl) LoadEnv() {
 	if err != nil {
 		envMap = map[string]string{}
 	}
-	// Merge with actual environment
+
 	for _, kv := range os.Environ() {
 		parts := bytes.SplitN([]byte(kv), []byte("="), 2)
 		if len(parts) == 2 {
@@ -56,7 +56,7 @@ func (t *TemplateEngineImpl) LoadHistory() error {
 	pokePath := filepath.Join(homeDir, ".poke", "tmp_poke_latest.json")
 	data, err := os.ReadFile(pokePath)
 	if err != nil {
-		return nil // skip if not present
+		return nil
 	}
 
 	var raw map[string]interface{}

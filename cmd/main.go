@@ -12,15 +12,15 @@ import (
 )
 
 func main() {
-	runner := core.NewRequestRunner()
-
 	ensurePokeDir()
 	opts := parseCLIOptions()
 	args := flag.Args()
 
+	runner := core.NewRequestRunner(opts)
+
 	switch {
 	case len(args) > 0 && args[0] == "send":
-		handleSend(args, opts, runner)
+		handleSend(args, runner)
 		return
 	case opts.Help:
 		printUsage()
@@ -51,6 +51,7 @@ func main() {
 		Body:        payload,
 		BodyFile:    opts.DataFile,
 		BodyStdin:   false,
+		Retries:     opts.Retries,
 		Meta:        &types.Meta{CreatedAt: time.Now()},
 		Workers:     opts.Workers,
 		Repeat:      opts.Repeat,
@@ -74,7 +75,7 @@ func main() {
 	}
 
 	req.URL = fullURL
-	if err := runner.Execute(req, opts.Verbose); err != nil {
+	if err := runner.Execute(req); err != nil {
 		util.Error("Failed to execute request", err)
 	}
 }
@@ -95,6 +96,9 @@ func parseCLIOptions() *types.CLIOptions {
 	flag.IntVar(&opts.Repeat, "repeat", 1, "Number of times to send the request (across all workers)")
 	flag.IntVar(&opts.Workers, "workers", 1, "Number of concurrent workers")
 	flag.IntVar(&opts.ExpectStatus, "expect-status", 0, "Expected status code")
+	flag.IntVar(&opts.Retries, "retry", 1, "Retry request if response status is not 200 or does not match --expect-status")
+	flag.IntVar(&opts.Backoff, "backoff", 0, "Backoff duration")
+	flag.BoolVar(&opts.DryRun, "dry-run", false, "Render request but do not send")
 	flag.BoolVar(&opts.Editor, "edit", false, "Open payload in editor")
 	flag.StringVar(&opts.SavePath, "save", "", "Save request to file")
 	flag.BoolVar(&opts.Verbose, "v", false, "Verbose output")
@@ -113,13 +117,13 @@ func printUsage() {
 	flag.PrintDefaults()
 }
 
-func handleSend(args []string, opts *types.CLIOptions, handler core.RequestRunner) {
-	if opts.Help || len(args) < 2 {
+func handleSend(args []string, runner *core.RequestRunnerImpl) {
+	if runner.Opts.Help || len(args) < 2 {
 		fmt.Println("Usage: poke send <path>")
 		os.Exit(1)
 	}
 
-	if err := handler.Collect(args[1], opts.Verbose); err != nil {
+	if err := runner.Collect(args[1]); err != nil {
 		util.Error("Failed to send request(s)", err)
 	}
 }

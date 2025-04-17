@@ -209,3 +209,24 @@ func Debug(module string, msg string) {
 		fmt.Fprintf(os.Stderr, "[%s] %s\n", module, msg)
 	}
 }
+
+func DumpRequest(req *types.PokeRequest) {
+	if req == nil {
+		return
+	}
+
+	fmt.Printf("Method: %s\n", req.Method)
+	fmt.Printf("Host: %s\n", req.URL)
+	if len(req.Headers) > 0 {
+		fmt.Printf("Headers:\n")
+		for k, v := range req.Headers {
+			fmt.Printf("  %s: %s\n", k, strings.Join(v, ", "))
+		}
+	}
+	if len(req.Body) > 0 {
+		fmt.Printf("Data: %s", req.Body)
+	}
+	if len(req.BodyFile) > 0 {
+		fmt.Printf("Data File: %s", req.BodyFile)
+	}
+}

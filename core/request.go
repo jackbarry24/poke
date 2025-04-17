@@ -17,11 +17,11 @@ import (
 )
 
 type RequestRunner interface {
-	Execute(req *types.PokeRequest, verbose bool) error
+	Execute(req *types.PokeRequest) error
 	Send(req *types.PokeRequest) (*types.PokeResponse, error)
-	RunBenchmark(req *types.PokeRequest, verbose bool) error
-	RunSingleRequest(req *types.PokeRequest, verbose bool) error
-	Collect(path string, verbose bool) error
+	RunBenchmark(req *types.PokeRequest) error
+	RunSingleRequest(req *types.PokeRequest) error
+	Collect(path string) error
 	SaveRequest(req *types.PokeRequest, saveAs string) error
 	SaveResponse(resp *types.PokeResponse) error
 	Load(path string) (*types.PokeRequest, error)
@@ -30,23 +30,31 @@ type RequestRunner interface {
 type RequestRunnerImpl struct {
 	Tmpl *TemplateEngineImpl
 	Pyld *PayloadResolverImpl
+	Opts *types.CLIOptions
 }
 
-func NewRequestRunner() *RequestRunnerImpl {
+func NewRequestRunner(opts *types.CLIOptions) *RequestRunnerImpl {
 	return &RequestRunnerImpl{
 		Tmpl: &TemplateEngineImpl{},
 		Pyld: &PayloadResolverImpl{},
+		Opts: opts,
 	}
 }
 
-func (r *RequestRunnerImpl) Execute(req *types.PokeRequest, verbose bool) error {
+func (r *RequestRunnerImpl) Execute(req *types.PokeRequest) error {
+
+	if r.Opts.DryRun {
+		util.DumpRequest(req)
+		return nil
+	}
+
 	if req.Repeat > 1 {
-		return r.RunBenchmark(req, verbose)
+		return r.RunBenchmark(req)
 	}
-	return r.RunSingleRequest(req, verbose)
+	return r.RunSingleRequest(req)
 }
 
-func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest, verbose bool) error {
+func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 	var wg sync.WaitGroup
 	resultChan := make(chan time.Duration, req.Repeat)
 	errorChan := make(chan bool, req.Repeat)
@@ -71,7 +79,7 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest, verbose bool) e
 				duration := time.Since(t0)
 
 				reqNum := atomic.AddInt64(&counter, 1)
-				if verbose {
+				if r.Opts.Verbose {
 					status := "ERR"
 					if err == nil {
 						status = util.ColorStatus(resp.StatusCode)
@@ -130,30 +138,62 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest, verbose bool) e
 	return nil
 }
 
-func (r *RequestRunnerImpl) RunSingleRequest(req *types.PokeRequest, verbose bool) error {
-	start := time.Now()
-	util.Debug("runner", fmt.Sprintf("url: %s", req.URL))
-	resp, err := r.Send(req)
-	if err != nil {
-		util.Error("Request failed", err)
-	}
-	if err := r.SaveResponse(resp); err != nil {
-		util.Error("Failed to save response", err)
-	}
-	duration := time.Since(start).Seconds()
-	if err != nil {
-		util.Error("Request failed", err)
-	}
-	defer resp.Raw.Body.Close()
+func (r *RequestRunnerImpl) RunSingleRequest(req *types.PokeRequest) error {
+	var duration float64
+	var resp *types.PokeResponse
+	var err error
+	success := false
+	i := 0
 
-	if req.Assert != nil {
-		ok, err := util.AssertResponse(resp, req.Assert)
-		if !ok {
-			util.Error("Assertion failed", err)
+	for !success && i < req.Retries {
+		util.Debug("runner", fmt.Sprintf("attempt: %d url: %s", i+1, req.URL))
+		start := time.Now()
+		resp, err = r.Send(req)
+		duration = time.Since(start).Seconds()
+
+		if err != nil {
+			if i < req.Retries-1 {
+				fmt.Printf("attempt %d failed: %v, ...retrying\n", i+1, err)
+				time.Sleep(time.Second)
+			}
+			i += 1
+			continue
 		}
+
+		if err = r.SaveResponse(resp); err != nil {
+			util.Debug("runner", "failed to save latest response")
+		}
+
+		if err != nil {
+			if i < req.Retries-1 {
+				fmt.Printf("attempt %d failed: %v, ...retrying\n", i+1, err)
+				time.Sleep(time.Second)
+			}
+			i += 1
+			continue
+		}
+		defer resp.Raw.Body.Close()
+
+		if req.Assert != nil {
+			var ok bool
+			ok, err = util.AssertResponse(resp, req.Assert)
+			if !ok {
+				if i < req.Retries-1 {
+					fmt.Printf("attempt %d failed: %v, ...retrying\n", i+1, err)
+					time.Sleep(time.Second)
+				}
+				i += 1
+				continue
+			}
+		}
+		success = true
 	}
 
-	if verbose {
+	if !success {
+		util.Error(fmt.Sprintf("Request failed after %d attempt(s): %v\n", req.Retries, err), nil)
+	}
+
+	if r.Opts.Verbose {
 		util.PrintResponseVerbose(resp, req, resp.Body, duration)
 	} else {
 		fmt.Printf("%s\n\n", util.ColorStatus(resp.StatusCode))
@@ -238,7 +278,7 @@ func (r *RequestRunnerImpl) SaveResponse(resp *types.PokeResponse) error {
 	return os.WriteFile(filepath.Join(homeDir, ".poke", "tmp_poke_latest.json"), out, 0644)
 }
 
-func (r *RequestRunnerImpl) Collect(path string, verbose bool) error {
+func (r *RequestRunnerImpl) Collect(path string) error {
 	if strings.HasSuffix(path, ".json") {
 		if _, err := os.Stat(path); err == nil {
 			req, err := r.Load(path)
@@ -252,7 +292,7 @@ func (r *RequestRunnerImpl) Collect(path string, verbose bool) error {
 			req.Body = body
 			req.BodyFile = ""
 			req.BodyStdin = false
-			return r.Execute(req, verbose)
+			return r.Execute(req)
 		}
 	}
 
@@ -284,7 +324,7 @@ func (r *RequestRunnerImpl) Collect(path string, verbose bool) error {
 		req.BodyFile = ""
 		req.BodyStdin = false
 
-		err = r.Execute(req, verbose)
+		err = r.Execute(req)
 		if err != nil {
 			fmt.Printf("Request failed: %v\n", err)
 		}
