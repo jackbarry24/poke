@@ -26,6 +26,7 @@ type CLIOptions struct {
 
 type PokeResponse struct {
 	StatusCode  int                 `json:"status_code"`
+	Status      string              `json:"status"`
 	Headers     map[string][]string `json:"headers"`
 	Body        []byte              `json:"body"`
 	ContentType string              `json:"content_type"`
@@ -36,7 +37,10 @@ type PokeResponse struct {
 
 type PokeRequest struct {
 	Method      string              `json:"method"`
-	URL         string              `json:"url"`
+	FullURL     string              `json:"-"`
+	Scheme      string              `josn:"scheme"`
+	Host        string              `json:"host"`
+	Path        string              `json:"Path"`
 	Headers     map[string][]string `json:"headers"`
 	QueryParams map[string][]string `json:"query_params"`
 	Body        string              `json:"body"`

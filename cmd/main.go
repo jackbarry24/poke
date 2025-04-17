@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -35,9 +36,13 @@ func main() {
 		opts.Workers = opts.Repeat
 	}
 
-	url := args[0]
+	rawURL := args[0]
 	headers := util.ParseHeaders(opts.Headers)
-	queryParams := util.ParseQueryParams(url)
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		util.Error("Failed to parse URL", err)
+	}
+
 	payload, err := runner.Pyld.Resolve(opts.Data, opts.DataFile, opts.DataStdin, opts.Editor)
 	if err != nil {
 		util.Error("Failed to resolve payload", err)
@@ -45,9 +50,12 @@ func main() {
 
 	req := &types.PokeRequest{
 		Method:      opts.Method,
-		URL:         url,
+		FullURL:     rawURL,
+		Scheme:      u.Scheme,
+		Host:        u.Host,
+		Path:        u.Path,
 		Headers:     headers,
-		QueryParams: queryParams,
+		QueryParams: u.Query(),
 		Body:        payload,
 		BodyFile:    opts.DataFile,
 		BodyStdin:   false,
@@ -66,15 +74,13 @@ func main() {
 		req.Method = "POST"
 	}
 
-	fullURL := req.URL // save request will remove the query params
 	if opts.SavePath != "" {
 		if err := runner.SaveRequest(req, opts.SavePath); err != nil {
 			util.Error("Failed to save request", err)
 		}
-		fmt.Printf("Request saved to %s\n", opts.SavePath)
+		util.Info("[info] request saved to: %s", opts.SavePath)
 	}
 
-	req.URL = fullURL
 	if err := runner.Execute(req); err != nil {
 		util.Error("Failed to execute request", err)
 	}

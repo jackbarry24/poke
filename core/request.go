@@ -43,7 +43,6 @@ func NewRequestRunner(opts *types.CLIOptions) *RequestRunnerImpl {
 }
 
 func (r *RequestRunnerImpl) Execute(req *types.PokeRequest) error {
-
 	if r.Opts.DryRun {
 		util.DumpRequest(req)
 		return nil
@@ -66,7 +65,7 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 	remainder := req.Repeat % req.Workers
 	var counter int64
 
-	for i := 0; i < req.Workers; i++ {
+	for i := range req.Workers {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
@@ -74,26 +73,24 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 			if workerID < remainder {
 				workload++
 			}
-			for j := 0; j < workload; j++ {
+			for range workload {
 				resp, err := r.SendAndVerify(req)
 
 				reqNum := atomic.AddInt64(&counter, 1)
-				if r.Opts.Verbose {
-					status := "ERR"
-					if err == nil {
-						status = util.ColorStatus(resp.StatusCode)
-					}
-					fmt.Printf("[runner] Request %-3d Worker %-2d: %-7s (%v)\n", reqNum, workerID, status, resp.Duration)
+				if r.Opts.Verbose && resp != nil {
+					status := util.ColorStatus(resp.StatusCode)
+					util.Info("req %-3d worker %-2d: %-7s (%v)", reqNum, workerID, status, resp.Duration)
 				}
 
 				if err != nil {
 					errorChan <- true
 					continue
 				}
-				resp.Raw.Body.Close()
 
 				errorChan <- false
-				resultChan <- resp.Duration
+				if resp != nil {
+					resultChan <- resp.Duration
+				}
 			}
 		}(i)
 	}
@@ -132,53 +129,49 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 func (r *RequestRunnerImpl) RunSingleRequest(req *types.PokeRequest) error {
 	var resp *types.PokeResponse
 	var err error
-	success := false
-	i := 0
 
-	for !success && i < req.Retries {
-		util.Debug("runner", fmt.Sprintf("attempt: %d url: %s", i+1, req.URL))
+	for i := range req.Retries {
 		resp, err = r.SendAndVerify(req)
-		if err != nil {
-			fmt.Printf("[runner] attempt %d failed: %v, ...retrying\n", i+1, err)
-			i += 1
-			continue
+		if err == nil {
+			break
 		}
-		success = true
+		if r.Opts.Verbose {
+			util.Info("attempt %d failed...retrying", i+1)
+		}
+		time.Sleep(time.Second)
 	}
 
-	if !success {
-		util.Error(fmt.Sprintf("Request failed after %d attempt(s): %v\n", req.Retries, err), nil)
+	if err != nil {
+		util.Error(fmt.Sprintf("Request failed after %d attempt(s): %v", req.Retries, err), nil)
 	}
 
 	if err := r.SaveResponse(resp); err != nil {
-		util.Debug("runner", "failed to save latest response")
+		util.Debug("runner", "Failed to save latest response")
 	}
 
 	if r.Opts.Verbose {
 		util.PrintResponseVerbose(resp, req, resp.Body, resp.Duration)
 	} else {
-		fmt.Printf("%s\n\n", util.ColorStatus(resp.StatusCode))
-		util.PrintBody(resp.Body, resp.ContentType)
+		util.Info("%s", util.ColorStatus(resp.StatusCode))
+		if resp.StatusCode != 404 {
+			util.PrintBody(resp.Body, resp.ContentType)
+		}
 	}
 	return nil
 }
 
 func (r *RequestRunnerImpl) SendAndVerify(req *types.PokeRequest) (*types.PokeResponse, error) {
-	start := time.Now()
 	resp, err := r.Send(req)
-	duration := time.Since(start)
 
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Raw.Body.Close()
 
-	resp.Duration = duration
-
 	if req.Assert != nil {
-		ok, err := util.AssertResponse(resp, req.Assert)
+		ok, _ := util.AssertResponse(resp, req.Assert)
 		if !ok {
-			return nil, err
+			return resp, err
 		}
 	}
 
@@ -187,7 +180,8 @@ func (r *RequestRunnerImpl) SendAndVerify(req *types.PokeRequest) (*types.PokeRe
 
 func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, error) {
 	client := &http.Client{}
-	httpReq, err := http.NewRequest(req.Method, req.URL, bytes.NewBufferString(req.Body))
+
+	httpReq, err := http.NewRequest(req.Method, req.FullURL, bytes.NewBufferString(req.Body))
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +190,9 @@ func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, e
 		httpReq.Header.Set(k, strings.Join(v, ","))
 	}
 
+	start := time.Now()
 	resp, err := client.Do(httpReq)
+	duration := time.Since(start)
 	if err != nil {
 		return nil, err
 	}
@@ -213,6 +209,7 @@ func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, e
 		ContentType: resp.Header.Get("Content-Type"),
 		Raw:         resp,
 		Timestamp:   time.Now(),
+		Duration:    duration,
 	}, nil
 }
 
@@ -222,11 +219,6 @@ func (r *RequestRunnerImpl) SaveRequest(req *types.PokeRequest, path string) err
 	}
 	if req.BodyStdin {
 		req.BodyStdin = false
-	}
-
-	if strings.Contains(req.URL, "?") {
-		parts := strings.Split(req.URL, "?")
-		req.URL = parts[0]
 	}
 
 	out, err := json.MarshalIndent(req, "", "  ")
@@ -311,13 +303,12 @@ func (r *RequestRunnerImpl) Collect(path string) error {
 		if err != nil {
 			fmt.Printf("Request failed: %v\n", err)
 		}
-		fmt.Println()
 	}
 	return nil
 }
 
-func (r *RequestRunnerImpl) Load(path string) (*types.PokeRequest, error) {
-	data, err := os.ReadFile(path)
+func (r *RequestRunnerImpl) Load(fpath string) (*types.PokeRequest, error) {
+	data, err := os.ReadFile(fpath)
 	if err != nil {
 		return nil, err
 	}
@@ -327,16 +318,27 @@ func (r *RequestRunnerImpl) Load(path string) (*types.PokeRequest, error) {
 		return nil, err
 	}
 
-	if len(req.QueryParams) > 0 && !strings.Contains(req.URL, "?") {
-		query := "?"
+	scheme := req.Scheme
+	if scheme == "" {
+		scheme = "http"
+	}
+	host := req.Host
+	path := req.Path
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	var queryStr string
+	if len(req.QueryParams) > 0 {
+		q := make([]string, 0)
 		for k, vals := range req.QueryParams {
 			for _, v := range vals {
-				query += fmt.Sprintf("%s=%s&", k, v)
+				q = append(q, fmt.Sprintf("%s=%s", k, v))
 			}
 		}
-		query = strings.TrimSuffix(query, "&")
-		req.URL += query
+		queryStr = "?" + strings.Join(q, "&")
 	}
+	req.FullURL = fmt.Sprintf("%s://%s%s%s", scheme, host, path, queryStr)
 
 	return req, nil
 }

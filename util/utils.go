@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -23,23 +22,18 @@ func ReadResponse(resp *http.Response) ([]byte, error) {
 func PrintResponseVerbose(resp *types.PokeResponse, req *types.PokeRequest, body []byte, duration time.Duration) {
 	status := ColorStatus(resp.StatusCode)
 
-	fmt.Println("──────────────────────Response Data──────────────────────")
-	fmt.Printf("Status:             %s\n", status)
-	fmt.Printf("URL:                %s\n", req.URL)
-	fmt.Printf("Method:             %s\n", req.Method)
-	fmt.Printf("Duration:           %.2fs\n", duration.Seconds())
-	fmt.Printf("Request Size:       %d bytes\n", len(req.Body))
-	fmt.Printf("Response Size:      %d bytes\n", len(body))
-	fmt.Printf("Content-Type:       %s\n", resp.ContentType)
-
-	if len(resp.Headers) > 0 {
-		fmt.Println("\nResponse Headers:")
-		for k, v := range resp.Headers {
-			fmt.Printf("  %s: %s\n", k, strings.Join(v, ", "))
-		}
+	fmt.Printf("-> %s %s\n", req.Method, req.Path)
+	fmt.Printf("-> Host: %s\n", req.Host)
+	for k, v := range req.Headers {
+		fmt.Printf("-> %s: %s\n", k, strings.Join(v, ", "))
 	}
 
-	fmt.Println("──────────────────────Response Body──────────────────────")
+	fmt.Println()
+	fmt.Printf("<- %s\n", status)
+	for k, v := range resp.Headers {
+		fmt.Printf("<- %s: %s\n", k, strings.Join(v, ", "))
+	}
+	fmt.Println("<-")
 	PrintBody(body, resp.ContentType)
 }
 
@@ -61,7 +55,6 @@ func PrintBody(body []byte, contentType string) {
 }
 
 func PrintBenchmarkResults(res types.BenchmarkResult, totalTime float64, req *types.PokeRequest) {
-	fmt.Println()
 	fmt.Println("╭──────────── Poke Benchmark ────────────╮")
 	fmt.Printf("│ Requests       %-23d │\n", res.Total)
 	fmt.Printf("│ Success        %-32s │\n", ColorString(fmt.Sprintf("%d", res.Successes), "green"))
@@ -91,7 +84,7 @@ func PrintBenchmarkResults(res types.BenchmarkResult, totalTime float64, req *ty
 	}
 
 	throughput := float64(res.Total) / totalTime
-	fmt.Printf("│ Throughput     %-.2f req/s%13s │\n", throughput, "")
+	fmt.Printf("│ Throughput     %-23.2f │\n", throughput)
 	fmt.Printf("│ Workers        %-23d │\n", req.Workers)
 	fmt.Println("╰────────────────────────────────────────╯")
 }
@@ -148,14 +141,6 @@ func ParseHeaders(headerStr string) map[string][]string {
 	return headers
 }
 
-func ParseQueryParams(rawURL string) map[string][]string {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return map[string][]string{}
-	}
-	return u.Query()
-}
-
 func MergeHeaders(base, extra map[string][]string) {
 	for k, v := range extra {
 		base[k] = v
@@ -203,11 +188,16 @@ func Error(msg string, err error) {
 	os.Exit(1)
 }
 
-func Debug(module string, msg string) {
+func Debug(module string, format string, args ...interface{}) {
 	debug := strings.ToLower(strings.TrimSpace(os.Getenv("DEBUG")))
 	if debug == "1" || debug == "true" {
-		fmt.Fprintf(os.Stderr, "[%s] %s\n", module, msg)
+		fmt.Fprintf(os.Stderr, "[%s] ", module)
+		fmt.Fprintf(os.Stderr, format+"\n", args)
 	}
+}
+
+func Info(format string, args ...interface{}) {
+	fmt.Printf(format+"\n", args...)
 }
 
 func DumpRequest(req *types.PokeRequest) {
@@ -216,7 +206,7 @@ func DumpRequest(req *types.PokeRequest) {
 	}
 
 	fmt.Printf("Method: %s\n", req.Method)
-	fmt.Printf("Host: %s\n", req.URL)
+	fmt.Printf("Host: %s\n", req.Host)
 	if len(req.Headers) > 0 {
 		fmt.Printf("Headers:\n")
 		for k, v := range req.Headers {
