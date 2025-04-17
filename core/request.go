@@ -19,6 +19,7 @@ import (
 type RequestRunner interface {
 	Execute(req *types.PokeRequest) error
 	Send(req *types.PokeRequest) (*types.PokeResponse, error)
+	SendAndVerify(req *types.PokeRequest) (*types.PokeResponse, error)
 	RunBenchmark(req *types.PokeRequest) error
 	RunSingleRequest(req *types.PokeRequest) error
 	Collect(path string) error
@@ -74,9 +75,7 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 				workload++
 			}
 			for j := 0; j < workload; j++ {
-				t0 := time.Now()
-				resp, err := r.Send(req)
-				duration := time.Since(t0)
+				resp, err := r.SendAndVerify(req)
 
 				reqNum := atomic.AddInt64(&counter, 1)
 				if r.Opts.Verbose {
@@ -84,7 +83,7 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 					if err == nil {
 						status = util.ColorStatus(resp.StatusCode)
 					}
-					fmt.Printf("Request %-3d [Worker %-2d]: %-7s (%v)\n", reqNum, workerID, status, duration)
+					fmt.Printf("[runner] Request %-3d Worker %-2d: %-7s (%v)\n", reqNum, workerID, status, resp.Duration)
 				}
 
 				if err != nil {
@@ -93,16 +92,8 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 				}
 				resp.Raw.Body.Close()
 
-				if req.Assert != nil {
-					ok, _ := util.AssertResponse(resp, req.Assert)
-					if !ok {
-						errorChan <- true
-						continue
-					}
-				}
-
 				errorChan <- false
-				resultChan <- duration
+				resultChan <- resp.Duration
 			}
 		}(i)
 	}
@@ -139,7 +130,6 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 }
 
 func (r *RequestRunnerImpl) RunSingleRequest(req *types.PokeRequest) error {
-	var duration float64
 	var resp *types.PokeResponse
 	var err error
 	success := false
@@ -147,44 +137,11 @@ func (r *RequestRunnerImpl) RunSingleRequest(req *types.PokeRequest) error {
 
 	for !success && i < req.Retries {
 		util.Debug("runner", fmt.Sprintf("attempt: %d url: %s", i+1, req.URL))
-		start := time.Now()
-		resp, err = r.Send(req)
-		duration = time.Since(start).Seconds()
-
+		resp, err = r.SendAndVerify(req)
 		if err != nil {
-			if i < req.Retries-1 {
-				fmt.Printf("attempt %d failed: %v, ...retrying\n", i+1, err)
-				time.Sleep(time.Second)
-			}
+			fmt.Printf("[runner] attempt %d failed: %v, ...retrying\n", i+1, err)
 			i += 1
 			continue
-		}
-
-		if err = r.SaveResponse(resp); err != nil {
-			util.Debug("runner", "failed to save latest response")
-		}
-
-		if err != nil {
-			if i < req.Retries-1 {
-				fmt.Printf("attempt %d failed: %v, ...retrying\n", i+1, err)
-				time.Sleep(time.Second)
-			}
-			i += 1
-			continue
-		}
-		defer resp.Raw.Body.Close()
-
-		if req.Assert != nil {
-			var ok bool
-			ok, err = util.AssertResponse(resp, req.Assert)
-			if !ok {
-				if i < req.Retries-1 {
-					fmt.Printf("attempt %d failed: %v, ...retrying\n", i+1, err)
-					time.Sleep(time.Second)
-				}
-				i += 1
-				continue
-			}
 		}
 		success = true
 	}
@@ -193,13 +150,39 @@ func (r *RequestRunnerImpl) RunSingleRequest(req *types.PokeRequest) error {
 		util.Error(fmt.Sprintf("Request failed after %d attempt(s): %v\n", req.Retries, err), nil)
 	}
 
+	if err := r.SaveResponse(resp); err != nil {
+		util.Debug("runner", "failed to save latest response")
+	}
+
 	if r.Opts.Verbose {
-		util.PrintResponseVerbose(resp, req, resp.Body, duration)
+		util.PrintResponseVerbose(resp, req, resp.Body, resp.Duration)
 	} else {
 		fmt.Printf("%s\n\n", util.ColorStatus(resp.StatusCode))
 		util.PrintBody(resp.Body, resp.ContentType)
 	}
 	return nil
+}
+
+func (r *RequestRunnerImpl) SendAndVerify(req *types.PokeRequest) (*types.PokeResponse, error) {
+	start := time.Now()
+	resp, err := r.Send(req)
+	duration := time.Since(start)
+
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Raw.Body.Close()
+
+	resp.Duration = duration
+
+	if req.Assert != nil {
+		ok, err := util.AssertResponse(resp, req.Assert)
+		if !ok {
+			return nil, err
+		}
+	}
+
+	return resp, nil
 }
 
 func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, error) {

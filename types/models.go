@@ -31,6 +31,7 @@ type PokeResponse struct {
 	ContentType string              `json:"content_type"`
 	Raw         *http.Response      `json:"-"` // not serializable
 	Timestamp   time.Time           `json:"timestamp"`
+	Duration    time.Duration       `json:"duration"`
 }
 
 type PokeRequest struct {

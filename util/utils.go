@@ -20,14 +20,14 @@ func ReadResponse(resp *http.Response) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func PrintResponseVerbose(resp *types.PokeResponse, req *types.PokeRequest, body []byte, duration float64) {
+func PrintResponseVerbose(resp *types.PokeResponse, req *types.PokeRequest, body []byte, duration time.Duration) {
 	status := ColorStatus(resp.StatusCode)
 
 	fmt.Println("──────────────────────Response Data──────────────────────")
 	fmt.Printf("Status:             %s\n", status)
 	fmt.Printf("URL:                %s\n", req.URL)
 	fmt.Printf("Method:             %s\n", req.Method)
-	fmt.Printf("Duration:           %.2fs\n", duration)
+	fmt.Printf("Duration:           %.2fs\n", duration.Seconds())
 	fmt.Printf("Request Size:       %d bytes\n", len(req.Body))
 	fmt.Printf("Response Size:      %d bytes\n", len(body))
 	fmt.Printf("Content-Type:       %s\n", resp.ContentType)
