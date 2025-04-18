@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"os"
 	"strings"
@@ -128,7 +129,7 @@ func ParseHeaders(headerStr string) map[string][]string {
 	if headerStr == "" {
 		return headers
 	}
-	// Expect input like: "Key1:Value1;Key2:Value2"
+
 	pairs := strings.Split(headerStr, ";")
 	for _, pair := range pairs {
 		kv := strings.SplitN(pair, ":", 2)
@@ -179,13 +180,15 @@ func ColorString(s string, colorName string) string {
 	}
 }
 
-func Error(msg string, err error) {
+func Error(msg string, err error, exit bool) {
 	if err == nil {
 		fmt.Fprintf(os.Stderr, "[Error] %s\n", msg)
 	} else {
 		fmt.Fprintf(os.Stderr, "[Error] %s: %v\n", msg, err)
 	}
-	os.Exit(1)
+	if exit {
+		os.Exit(1)
+	}
 }
 
 func Debug(module string, format string, args ...interface{}) {
@@ -197,7 +200,7 @@ func Debug(module string, format string, args ...interface{}) {
 }
 
 func Info(format string, args ...interface{}) {
-	fmt.Printf(format+"\n", args...)
+	fmt.Printf("[Info] "+format+"\n", args...)
 }
 
 func DumpRequest(req *types.PokeRequest) {
@@ -219,4 +222,14 @@ func DumpRequest(req *types.PokeRequest) {
 	if len(req.BodyFile) > 0 {
 		fmt.Printf("Data File: %s", req.BodyFile)
 	}
+}
+
+func Backoff(base, max time.Duration, attempt int) time.Duration {
+	backoff := base * (1 << attempt)
+	if backoff > max {
+		backoff = max
+	}
+
+	jitter := time.Duration(rand.Int63n(int64(backoff)))
+	return backoff + jitter
 }

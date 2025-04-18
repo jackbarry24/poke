@@ -9,7 +9,6 @@ import (
 	"text/template"
 
 	"poke/types"
-	//"poke/util"
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/joho/godotenv"
@@ -17,7 +16,7 @@ import (
 
 type TemplateContext struct {
 	Env     map[string]string
-	History map[string]interface{}
+	History map[string]any
 }
 
 type TemplateEngine interface {
@@ -28,7 +27,7 @@ type TemplateEngine interface {
 
 type TemplateEngineImpl struct {
 	env     map[string]string
-	history map[string]interface{}
+	history map[string]any
 }
 
 func (t *TemplateEngineImpl) LoadEnv() {
@@ -65,7 +64,7 @@ func (t *TemplateEngineImpl) LoadHistory() error {
 	}
 
 	if bodyStr, ok := raw["body"].(string); ok {
-		var parsed interface{}
+		var parsed any
 		if err := json.Unmarshal([]byte(bodyStr), &parsed); err == nil {
 			raw["body"] = parsed
 		}

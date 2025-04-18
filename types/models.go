@@ -20,7 +20,7 @@ type CLIOptions struct {
 	Backoff      int
 	DryRun       bool
 	Editor       bool
-	SavePath     string // save to .poke
+	SavePath     string
 	Help         bool
 }
 
@@ -38,9 +38,9 @@ type PokeResponse struct {
 type PokeRequest struct {
 	Method      string              `json:"method"`
 	FullURL     string              `json:"-"`
-	Scheme      string              `josn:"scheme"`
+	Scheme      string              `json:"scheme"`
 	Host        string              `json:"host"`
-	Path        string              `json:"Path"`
+	Path        string              `json:"path"`
 	Headers     map[string][]string `json:"headers"`
 	QueryParams map[string][]string `json:"query_params"`
 	Body        string              `json:"body"`
@@ -54,9 +54,9 @@ type PokeRequest struct {
 }
 
 type Assertions struct {
-	Status       int
-	BodyContains string
-	Headers      map[string][]string
+	Status       int                 `json:"status"`
+	BodyContains string              `json:"body_contains"`
+	Headers      map[string][]string `json:"headers"`
 }
 
 type Meta struct {

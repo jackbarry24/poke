@@ -74,7 +74,7 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 				workload++
 			}
 			for range workload {
-				resp, err := r.SendAndVerify(req)
+				resp, ok, err := r.SendAndVerify(req)
 
 				reqNum := atomic.AddInt64(&counter, 1)
 				if r.Opts.Verbose && resp != nil {
@@ -82,7 +82,7 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 					util.Info("req %-3d worker %-2d: %-7s (%v)", reqNum, workerID, status, resp.Duration)
 				}
 
-				if err != nil {
+				if err != nil || !ok {
 					errorChan <- true
 					continue
 				}
@@ -129,53 +129,64 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 func (r *RequestRunnerImpl) RunSingleRequest(req *types.PokeRequest) error {
 	var resp *types.PokeResponse
 	var err error
+	ok := false
+
+	baseBackoff := time.Duration(r.Opts.Backoff) * time.Second
+	maxBackoff := 10 * time.Second
 
 	for i := range req.Retries {
-		resp, err = r.SendAndVerify(req)
-		if err == nil {
+		resp, ok, err = r.SendAndVerify(req)
+		if ok {
 			break
 		}
-		if r.Opts.Verbose {
-			util.Info("attempt %d failed...retrying", i+1)
+		backoff := util.Backoff(baseBackoff, maxBackoff, i)
+		if r.Opts.Verbose && req.Retries > 1 {
+			util.Info("Attempt %d failed", i+1)
 		}
-		time.Sleep(time.Second)
+		if i < req.Retries-1 {
+			util.Info("Retrying...backing off for %ds", backoff)
+			time.Sleep(backoff)
+		}
+
 	}
 
-	if err != nil {
-		util.Error(fmt.Sprintf("Request failed after %d attempt(s): %v", req.Retries, err), nil)
+	if err != nil || !ok {
+		util.Error(fmt.Sprintf("Request failed after %d attempt(s): %v", req.Retries, err), nil, false)
 	}
 
 	if err := r.SaveResponse(resp); err != nil {
 		util.Debug("runner", "Failed to save latest response")
 	}
 
-	if r.Opts.Verbose {
-		util.PrintResponseVerbose(resp, req, resp.Body, resp.Duration)
-	} else {
-		util.Info("%s", util.ColorStatus(resp.StatusCode))
-		if resp.StatusCode != 404 {
-			util.PrintBody(resp.Body, resp.ContentType)
+	if ok {
+		if r.Opts.Verbose {
+			util.PrintResponseVerbose(resp, req, resp.Body, resp.Duration)
+		} else {
+			util.Info("%s", util.ColorStatus(resp.StatusCode))
+			if resp.StatusCode != 404 {
+				util.PrintBody(resp.Body, resp.ContentType)
+			}
 		}
 	}
 	return nil
 }
 
-func (r *RequestRunnerImpl) SendAndVerify(req *types.PokeRequest) (*types.PokeResponse, error) {
+func (r *RequestRunnerImpl) SendAndVerify(req *types.PokeRequest) (*types.PokeResponse, bool, error) {
 	resp, err := r.Send(req)
 
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer resp.Raw.Body.Close()
 
 	if req.Assert != nil {
-		ok, _ := util.AssertResponse(resp, req.Assert)
+		ok, err := util.AssertResponse(resp, req.Assert)
 		if !ok {
-			return resp, err
+			return resp, false, err
 		}
 	}
 
-	return resp, nil
+	return resp, true, nil
 }
 
 func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, error) {
