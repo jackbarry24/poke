@@ -1,11 +1,8 @@
 # poke
 
-**poke** is a fast, minimal, HTTP request sender for the terminal. It is not designed as a drop in curl replacement, and will not offer nearly the same amount of features as curl. It gives you powerful HTTP debugging with a CLI-first workflow, file-backed requests, 
-Vim (or any other editor) based editing, and smart request reuse.
+**poke** is a fast, minimal, HTTP request sender for the terminal. It is not designed as a drop in curl replacement, and will not offer nearly the same amount of features as curl. It let's you save requests as .json file and resend them easily from the command line. 
 
 ---
-
-## Features
 
 ## Features
 
@@ -14,10 +11,11 @@ Vim (or any other editor) based editing, and smart request reuse.
 - Load payloads from stdin: `--data-stdin`
 - `--edit` flag to open payloads in `$EDITOR` 
 - Save complete requests to disk: `--save myreq.json`
-- Send previously saved requests: `send <file|collection>`
+- Send previously saved requests: `send <file|directory>`
 - Pretty, colorized output
 - Reusable request collections (`collections` command)
 - Concurrency with `--workers` and `--repeat`
+- Retry and backoff with `--retry` and `backoff`
 - Auto-verifies status codes via `--expect-status`
 
 ---
@@ -59,25 +57,19 @@ poke -X POST --edit -H "Content-Type:application/json" https://httpbin.org/post
 
 Save request
 ```bash
-poke -X PUT --data-file data.json --save test.json https://httpbin.org/post
+poke -X GET --save myreq.json https://httpbin.org/get
 ```
 
-Re-send saved request
+Send request
 ```bash
-poke send test.json
+poke send myreq.json
 ```
+**Note** if you have multiple json request files in one directory you can run them all at once using `poke send path/`
 
-List collections
-```bash
-poke collections
-```
+Other features of note:
+- Env templating: In any request json file you can use `{{ env.VAR }}` to fill in a secret/variable from env or a .env file.
+- History templating: In any request json file you can use `{{ latest.Headers["Content-Length"] }}` for example. This allows you to chain responses together when running a collection. If you need to force the files to run in a certain order for the chaining to work simply name them `1_getuser.json`, `2_updateuser.json` and so on.
+- Assertions: In each request json you can manually add status, body, and header assertions (status will be populated from `--expect-status`). This will cause the request to fail if the status doesn't match, etc.
 
-View a collection
-```bash
-poke collections my_collection
-```
 
-Run a collection
-```bash
-poke send my_collection
-```
+
