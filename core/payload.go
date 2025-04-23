@@ -7,48 +7,36 @@ import (
 )
 
 type PayloadResolver interface {
-	Resolve(data, dataFile string, dataStdin, edit bool) (string, error)
+	Resolve(data, dataFile string, dataStdin, edit bool) ([]byte, error)
 }
 
 type PayloadResolverImpl struct{}
 
-func (r *PayloadResolverImpl) Resolve(data, dataFile string, dataStdin, edit bool) (string, error) {
-	sourceCount := 0
-	if data != "" {
-		sourceCount++
-	}
-	if dataFile != "" {
-		sourceCount++
-	}
-	if dataStdin {
-		sourceCount++
-	}
-	if sourceCount > 1 {
-		return "", fmt.Errorf("only one of --data, --data-file, or --data-stdin can be used")
-	}
-
-	var prefill string
+func (r *PayloadResolverImpl) Resolve(data string, dataFile string, dataStdin bool, edit bool) ([]byte, error) {
+	var prefill []byte
 
 	switch {
+	case data != "":
+		prefill = []byte(data)
 	case dataFile != "":
 		bytes, err := os.ReadFile(dataFile)
 		if err != nil {
-			return "", fmt.Errorf("failed to read data file: %w", err)
+			return nil, fmt.Errorf("failed to read data file: %w", err)
 		}
-		prefill = string(bytes)
+		prefill = bytes
 	case dataStdin:
 		bytes, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return "", fmt.Errorf("failed to read from stdin: %w", err)
+			return nil, fmt.Errorf("failed to read from stdin: %w", err)
 		}
-		prefill = string(bytes)
+		prefill = bytes
 	default:
-		prefill = data
+		prefill = []byte(data)
 	}
 
 	if edit {
 		editor := &EditorImpl{}
-		return editor.Open(prefill)
+		prefill, _ = editor.Open(prefill)
 	}
 	return prefill, nil
 }

@@ -40,13 +40,13 @@ func main() {
 	headers := util.ParseHeaders(opts.Headers)
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		util.Error("Failed to parse URL", err, true)
+		util.Error("Failed to parse URL: %v", err)
 	}
 
 	payload, err := runner.Pyld.Resolve(opts.Data, opts.DataFile, opts.DataStdin, opts.Editor)
 	if err != nil {
-		payload = opts.Data
-		util.Error("Failed to resolve payload", err, false)
+		payload = []byte(opts.Data)
+		util.Warn("Failed to resolve payload...request body may not be as expected: %v", err)
 	}
 
 	req := &types.PokeRequest{
@@ -59,8 +59,8 @@ func main() {
 		QueryParams: u.Query(),
 		Body:        payload,
 		BodyFile:    opts.DataFile,
-		BodyStdin:   false,
 		Retries:     opts.Retries,
+		Backoff:     opts.Backoff,
 		Meta:        &types.Meta{CreatedAt: time.Now()},
 		Workers:     opts.Workers,
 		Repeat:      opts.Repeat,
@@ -71,19 +71,21 @@ func main() {
 		req.Headers["User-Agent"] = []string{"poke/1.0"}
 	}
 
-	if req.Body != "" || req.BodyFile != "" || req.BodyStdin {
+	if len(req.Body) > 0 || req.BodyFile != "" || opts.DataStdin {
 		req.Method = "POST"
 	}
 
 	if opts.SavePath != "" {
 		if err := runner.SaveRequest(req, opts.SavePath); err != nil {
-			util.Error("Failed to save request", err, false)
+			util.Warn("Failed to save request: %v", err)
 		}
-		util.Info("[info] request saved to: %s", opts.SavePath)
+		if opts.Verbose {
+			util.Info("Request saved to: %s", opts.SavePath)
+		}
 	}
 
 	if err := runner.Execute(req); err != nil {
-		util.Error("Failed to execute request", nil, true)
+		util.Error("Failed to execute request: %v", err)
 	}
 }
 
@@ -104,7 +106,7 @@ func parseCLIOptions() *types.CLIOptions {
 	flag.IntVar(&opts.Workers, "workers", 1, "Number of concurrent workers")
 	flag.IntVar(&opts.ExpectStatus, "expect-status", 0, "Expected status code")
 	flag.IntVar(&opts.Retries, "retry", 1, "Retry request if response status is not 200 or does not match --expect-status")
-	flag.IntVar(&opts.Backoff, "backoff", 1, "Base backoff duration")
+	flag.IntVar(&opts.Backoff, "backoff", 1, "Base backoff duration in seconds")
 	flag.BoolVar(&opts.DryRun, "dry-run", false, "Render request but do not send")
 	flag.BoolVar(&opts.Editor, "edit", false, "Open payload in editor")
 	flag.StringVar(&opts.SavePath, "save", "", "Save request to file")
@@ -131,20 +133,20 @@ func handleSend(args []string, runner *core.RequestRunnerImpl) {
 	}
 
 	if err := runner.Collect(args[1]); err != nil {
-		util.Error("Failed to send request(s)", err, false)
+		util.Warn("Failed to send request(s): %v", err)
 	}
 }
 
 func ensurePokeDir() {
 	homedir, err := os.UserHomeDir()
 	if err != nil {
-		util.Error("Failed to get home directory", err, true)
+		util.Error("Failed to get home directory: %v", err)
 	}
 	pokeDir := fmt.Sprintf("%s/.poke", homedir)
 	if _, err := os.Stat(pokeDir); os.IsNotExist(err) {
 		err := os.MkdirAll(pokeDir, os.ModePerm)
 		if err != nil {
-			util.Error("Failed to create .poke directory", err, true)
+			util.Error("Failed to create .poke directory: %v", err)
 		}
 	}
 
@@ -152,7 +154,7 @@ func ensurePokeDir() {
 	if _, err := os.Stat(tmpFilePath); os.IsNotExist(err) {
 		file, err := os.Create(tmpFilePath)
 		if err != nil {
-			util.Error("Failed to create tmp_poke_latest.json file", err, true)
+			util.Error("Failed to create tmp_poke_latest.json file: %v", err)
 		}
 		defer file.Close()
 	}

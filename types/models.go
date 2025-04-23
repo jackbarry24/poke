@@ -43,11 +43,11 @@ type PokeRequest struct {
 	Path        string              `json:"path"`
 	Headers     map[string][]string `json:"headers"`
 	QueryParams map[string][]string `json:"query_params"`
-	Body        string              `json:"body"`
+	Body        []byte              `json:"body"`
 	BodyFile    string              `json:"body_file"`
-	BodyStdin   bool                `json:"body_stdin"`
 	Meta        *Meta               `json:"meta"`
 	Retries     int                 `json:"retries"`
+	Backoff     int                 `josn:"backoff"`
 	Repeat      int                 `json:"repeat"`
 	Workers     int                 `json:"workers"`
 	Assert      *Assertions         `json:"assert"`

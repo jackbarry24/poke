@@ -79,7 +79,7 @@ func (r *RequestRunnerImpl) RunBenchmark(req *types.PokeRequest) error {
 				reqNum := atomic.AddInt64(&counter, 1)
 				if r.Opts.Verbose && resp != nil {
 					status := util.ColorStatus(resp.StatusCode)
-					util.Info("req %-3d worker %-2d: %-7s (%v)", reqNum, workerID, status, resp.Duration)
+					util.Info("Req %-3d Worker %-2d: %-7s (%v)", reqNum, workerID, status, resp.Duration)
 				}
 
 				if err != nil || !ok {
@@ -131,8 +131,8 @@ func (r *RequestRunnerImpl) RunSingleRequest(req *types.PokeRequest) error {
 	var err error
 	ok := false
 
-	baseBackoff := time.Duration(r.Opts.Backoff) * time.Second
-	maxBackoff := 10 * time.Second
+	baseBackoff := time.Duration(req.Backoff) * time.Second
+	maxBackoff := baseBackoff + (10 * time.Second)
 
 	for i := range req.Retries {
 		resp, ok, err = r.SendAndVerify(req)
@@ -144,27 +144,30 @@ func (r *RequestRunnerImpl) RunSingleRequest(req *types.PokeRequest) error {
 			util.Info("Attempt %d failed", i+1)
 		}
 		if i < req.Retries-1 {
-			util.Info("Retrying...backing off for %ds", backoff)
+			if r.Opts.Verbose {
+				util.Info("Retrying...backing off for %.3f seconds", backoff.Seconds())
+			}
 			time.Sleep(backoff)
 		}
 
 	}
 
 	if err != nil || !ok {
-		util.Error(fmt.Sprintf("Request failed after %d attempt(s): %v", req.Retries, err), nil, false)
+		util.Warn("Request failed afer %d attempt(s): %v", req.Retries, err)
 	}
 
 	if err := r.SaveResponse(resp); err != nil {
-		util.Debug("runner", "Failed to save latest response")
+		util.Warn("Failed to save latest response...history may not work as expected: %v", err)
 	}
 
 	if ok {
 		if r.Opts.Verbose {
-			util.PrintResponseVerbose(resp, req, resp.Body, resp.Duration)
+			util.PrintResponseVerbose(resp, req, resp.Duration)
 		} else {
-			util.Info("%s", util.ColorStatus(resp.StatusCode))
 			if resp.StatusCode != 404 {
 				util.PrintBody(resp.Body, resp.ContentType)
+			} else {
+				util.Info("%s", util.ColorStatus(resp.StatusCode))
 			}
 		}
 	}
@@ -192,7 +195,7 @@ func (r *RequestRunnerImpl) SendAndVerify(req *types.PokeRequest) (*types.PokeRe
 func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, error) {
 	client := &http.Client{}
 
-	httpReq, err := http.NewRequest(req.Method, req.FullURL, bytes.NewBufferString(req.Body))
+	httpReq, err := http.NewRequest(req.Method, req.FullURL, bytes.NewBuffer(req.Body))
 	if err != nil {
 		return nil, err
 	}
@@ -226,10 +229,7 @@ func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, e
 
 func (r *RequestRunnerImpl) SaveRequest(req *types.PokeRequest, path string) error {
 	if req.BodyFile != "" {
-		req.Body = ""
-	}
-	if req.BodyStdin {
-		req.BodyStdin = false
+		req.Body = nil
 	}
 
 	out, err := json.MarshalIndent(req, "", "  ")
@@ -271,20 +271,18 @@ func (r *RequestRunnerImpl) Collect(path string) error {
 			if err != nil {
 				return fmt.Errorf("failed to load request: %w", err)
 			}
-			body, err := r.Pyld.Resolve(req.Body, req.BodyFile, req.BodyStdin, false)
+			body, err := r.Pyld.Resolve(string(req.Body), req.BodyFile, false, false)
 			if err != nil {
 				return fmt.Errorf("failed to resolve payload: %w", err)
 			}
 			req.Body = body
-			req.BodyFile = ""
-			req.BodyStdin = false
 			return r.Execute(req)
 		}
 	}
 
 	paths, err := walkPath(path)
 	if err != nil {
-		return fmt.Errorf("could not resolve collection: %w", err)
+		return fmt.Errorf("could not resolve file/directory: %w", err)
 	}
 	if len(paths) == 0 {
 		return fmt.Errorf("no .json files found for '%s'", path)
@@ -301,14 +299,12 @@ func (r *RequestRunnerImpl) Collect(path string) error {
 			continue
 		}
 
-		body, err := r.Pyld.Resolve(req.Body, req.BodyFile, req.BodyStdin, false)
+		body, err := r.Pyld.Resolve(string(req.Body), req.BodyFile, false, false)
 		if err != nil {
 			fmt.Printf("Failed to resolve body for '%s': %v\n", path, err)
 			continue
 		}
 		req.Body = body
-		req.BodyFile = ""
-		req.BodyStdin = false
 
 		err = r.Execute(req)
 		if err != nil {
@@ -327,6 +323,14 @@ func (r *RequestRunnerImpl) Load(fpath string) (*types.PokeRequest, error) {
 	req, err := r.Tmpl.RenderRequest(data)
 	if err != nil {
 		return nil, err
+	}
+
+	if req.BodyFile != "" {
+		content, err := os.ReadFile(req.BodyFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read body file: %w", err)
+		}
+		req.Body = content
 	}
 
 	scheme := req.Scheme

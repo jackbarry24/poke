@@ -14,13 +14,15 @@ import (
 
 	"github.com/TylerBrock/colorjson"
 	"github.com/fatih/color"
+	"maps"
+	"slices"
 )
 
 func ReadResponse(resp *http.Response) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
-func PrintResponseVerbose(resp *types.PokeResponse, req *types.PokeRequest, body []byte, duration time.Duration) {
+func PrintResponseVerbose(resp *types.PokeResponse, req *types.PokeRequest, duration time.Duration) {
 	status := ColorStatus(resp.StatusCode)
 
 	fmt.Printf("-> %s %s\n", req.Method, req.Path)
@@ -28,6 +30,13 @@ func PrintResponseVerbose(resp *types.PokeResponse, req *types.PokeRequest, body
 	for k, v := range req.Headers {
 		fmt.Printf("-> %s: %s\n", k, strings.Join(v, ", "))
 	}
+	fmt.Println("->")
+
+	contentType := ""
+	if vals, exists := req.Headers["Content-Type"]; exists && len(vals) > 0 {
+		contentType = vals[0]
+	}
+	PrintBody(req.Body, contentType)
 
 	fmt.Println()
 	fmt.Printf("<- %s\n", status)
@@ -35,12 +44,12 @@ func PrintResponseVerbose(resp *types.PokeResponse, req *types.PokeRequest, body
 		fmt.Printf("<- %s: %s\n", k, strings.Join(v, ", "))
 	}
 	fmt.Println("<-")
-	PrintBody(body, resp.ContentType)
+	PrintBody(resp.Body, resp.ContentType)
 }
 
 func PrintBody(body []byte, contentType string) {
 	if strings.Contains(contentType, "application/json") {
-		var obj interface{}
+		var obj any
 		err := json.Unmarshal(body, &obj)
 		if err != nil {
 			fmt.Println(string(body)) // fallback to raw
@@ -108,13 +117,7 @@ func AssertResponse(resp *types.PokeResponse, assertions *types.Assertions) (boo
 			return false, fmt.Errorf("expected header %q to be %q, but it is empty", k, strings.Join(expectedVals, ", "))
 		}
 		for _, expectedVal := range expectedVals {
-			found := false
-			for _, actualVal := range actualVals {
-				if actualVal == expectedVal {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(actualVals, expectedVal)
 			if !found {
 				return false, fmt.Errorf("expected header %q to contain %q, but it was not found", k, expectedVal)
 			}
@@ -143,9 +146,7 @@ func ParseHeaders(headerStr string) map[string][]string {
 }
 
 func MergeHeaders(base, extra map[string][]string) {
-	for k, v := range extra {
-		base[k] = v
-	}
+	maps.Copy(base, extra)
 }
 
 func ColorStatus(code int) string {
@@ -180,27 +181,23 @@ func ColorString(s string, colorName string) string {
 	}
 }
 
-func Error(msg string, err error, exit bool) {
-	if err == nil {
-		fmt.Fprintf(os.Stderr, "[Error] %s\n", msg)
-	} else {
-		fmt.Fprintf(os.Stderr, "[Error] %s: %v\n", msg, err)
-	}
-	if exit {
-		os.Exit(1)
-	}
+func Error(format string, args ...any) {
+	red := color.New(color.FgRed).SprintFunc()
+	prefix := red("[Error]")
+	fmt.Printf("%s "+format+"\n", append([]any{prefix}, args...)...)
+	os.Exit(1)
 }
 
-func Debug(module string, format string, args ...interface{}) {
-	debug := strings.ToLower(strings.TrimSpace(os.Getenv("DEBUG")))
-	if debug == "1" || debug == "true" {
-		fmt.Fprintf(os.Stderr, "[%s] ", module)
-		fmt.Fprintf(os.Stderr, format+"\n", args)
-	}
+func Info(format string, args ...any) {
+	blue := color.New(color.FgBlue).SprintFunc()
+	prefix := blue("[Info]")
+	fmt.Printf("%s "+format+"\n", append([]any{prefix}, args...)...)
 }
 
-func Info(format string, args ...interface{}) {
-	fmt.Printf("[Info] "+format+"\n", args...)
+func Warn(format string, args ...any) {
+	yellow := color.New(color.FgYellow).SprintFunc()
+	prefix := yellow("[Warn]")
+	fmt.Printf("%s "+format+"\n", append([]any{prefix}, args...)...)
 }
 
 func DumpRequest(req *types.PokeRequest) {
@@ -208,19 +205,23 @@ func DumpRequest(req *types.PokeRequest) {
 		return
 	}
 
-	fmt.Printf("Method: %s\n", req.Method)
-	fmt.Printf("Host: %s\n", req.Host)
+	contentType := ""
+	if vals, exists := req.Headers["Content-Type"]; exists && len(vals) > 0 {
+		contentType = vals[0]
+	}
+
+	fmt.Printf("-> %s %s\n", req.Method, req.Path)
+	fmt.Printf("-> Host: %s\n", req.Host)
 	if len(req.Headers) > 0 {
-		fmt.Printf("Headers:\n")
 		for k, v := range req.Headers {
-			fmt.Printf("  %s: %s\n", k, strings.Join(v, ", "))
+			fmt.Printf("-> %s: %s\n", k, strings.Join(v, ", "))
 		}
 	}
-	if len(req.Body) > 0 {
-		fmt.Printf("Data: %s", req.Body)
-	}
-	if len(req.BodyFile) > 0 {
-		fmt.Printf("Data File: %s", req.BodyFile)
+	fmt.Println("->")
+	if req.BodyFile != "" {
+		fmt.Printf("file:%s", req.BodyFile)
+	} else if len(req.Body) > 0 {
+		PrintBody([]byte(req.Body), contentType)
 	}
 }
 
