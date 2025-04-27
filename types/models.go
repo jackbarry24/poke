@@ -41,9 +41,10 @@ type PokeRequest struct {
 	Scheme      string              `json:"scheme"`
 	Host        string              `json:"host"`
 	Path        string              `json:"path"`
+	ContentType string              `json:"-"`
 	Headers     map[string][]string `json:"headers"`
 	QueryParams map[string][]string `json:"query_params"`
-	Body        []byte              `json:"body"`
+	Body        string              `json:"body"`
 	BodyFile    string              `json:"body_file"`
 	Meta        *Meta               `json:"meta"`
 	Retries     int                 `json:"retries"`

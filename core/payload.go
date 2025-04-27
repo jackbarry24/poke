@@ -12,26 +12,26 @@ type PayloadResolver interface {
 
 type PayloadResolverImpl struct{}
 
-func (r *PayloadResolverImpl) Resolve(data string, dataFile string, dataStdin bool, edit bool) ([]byte, error) {
-	var prefill []byte
+func (r *PayloadResolverImpl) Resolve(data string, dataFile string, dataStdin bool, edit bool) (string, error) {
+	var prefill string
 
 	switch {
 	case data != "":
-		prefill = []byte(data)
+		prefill = data
 	case dataFile != "":
 		bytes, err := os.ReadFile(dataFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read data file: %w", err)
+			return "", fmt.Errorf("failed to read data file: %w", err)
 		}
-		prefill = bytes
+		prefill = string(bytes)
 	case dataStdin:
 		bytes, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read from stdin: %w", err)
+			return "", fmt.Errorf("failed to read from stdin: %w", err)
 		}
-		prefill = bytes
+		prefill = string(bytes)
 	default:
-		prefill = []byte(data)
+		prefill = data
 	}
 
 	if edit {

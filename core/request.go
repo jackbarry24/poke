@@ -195,7 +195,7 @@ func (r *RequestRunnerImpl) SendAndVerify(req *types.PokeRequest) (*types.PokeRe
 func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, error) {
 	client := &http.Client{}
 
-	httpReq, err := http.NewRequest(req.Method, req.FullURL, bytes.NewBuffer(req.Body))
+	httpReq, err := http.NewRequest(req.Method, req.FullURL, bytes.NewBufferString(req.Body))
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, e
 
 func (r *RequestRunnerImpl) SaveRequest(req *types.PokeRequest, path string) error {
 	if req.BodyFile != "" {
-		req.Body = nil
+		req.Body = ""
 	}
 
 	out, err := json.MarshalIndent(req, "", "  ")
@@ -330,7 +330,7 @@ func (r *RequestRunnerImpl) Load(fpath string) (*types.PokeRequest, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to read body file: %w", err)
 		}
-		req.Body = content
+		req.Body = string(content)
 	}
 
 	scheme := req.Scheme
@@ -354,6 +354,11 @@ func (r *RequestRunnerImpl) Load(fpath string) (*types.PokeRequest, error) {
 		queryStr = "?" + strings.Join(q, "&")
 	}
 	req.FullURL = fmt.Sprintf("%s://%s%s%s", scheme, host, path, queryStr)
+
+	req.ContentType = util.DetectContentType(req)
+	if req.ContentType != "" {
+		req.Headers["Content-Type"] = []string{req.ContentType}
+	}
 
 	return req, nil
 }

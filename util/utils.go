@@ -5,17 +5,20 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"mime"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"poke/types"
 
-	"github.com/TylerBrock/colorjson"
-	"github.com/fatih/color"
 	"maps"
 	"slices"
+
+	"github.com/TylerBrock/colorjson"
+	"github.com/fatih/color"
 )
 
 func ReadResponse(resp *http.Response) ([]byte, error) {
@@ -36,7 +39,7 @@ func PrintResponseVerbose(resp *types.PokeResponse, req *types.PokeRequest, dura
 	if vals, exists := req.Headers["Content-Type"]; exists && len(vals) > 0 {
 		contentType = vals[0]
 	}
-	PrintBody(req.Body, contentType)
+	PrintBody([]byte(req.Body), contentType)
 
 	fmt.Println()
 	fmt.Printf("<- %s\n", status)
@@ -233,4 +236,26 @@ func Backoff(base, max time.Duration, attempt int) time.Duration {
 
 	jitter := time.Duration(rand.Int63n(int64(backoff)))
 	return backoff + jitter
+}
+
+func DetectContentType(req *types.PokeRequest) string {
+	// if the user specifies a MIME type use that
+	var ct string
+	for k, vals := range req.Headers {
+		if strings.ToLower(k) == "content-type" && len(vals) > 0 {
+			ct = vals[0]
+		}
+	}
+
+	// else try to infer it from the file name
+	if ct == "" && req.BodyFile != "" {
+		ct = mime.TypeByExtension(filepath.Ext(req.BodyFile))
+	}
+
+	// else try to manually infer it
+	if ct == "" && len(req.Body) > 0 {
+		return http.DetectContentType([]byte(req.Body))
+	}
+
+	return ct
 }

@@ -45,7 +45,7 @@ func main() {
 
 	payload, err := runner.Pyld.Resolve(opts.Data, opts.DataFile, opts.DataStdin, opts.Editor)
 	if err != nil {
-		payload = []byte(opts.Data)
+		payload = opts.Data
 		util.Warn("Failed to resolve payload...request body may not be as expected: %v", err)
 	}
 
@@ -73,6 +73,11 @@ func main() {
 
 	if len(req.Body) > 0 || req.BodyFile != "" || opts.DataStdin {
 		req.Method = "POST"
+	}
+
+	req.ContentType = util.DetectContentType(req)
+	if req.ContentType != "" {
+		req.Headers["Content-Type"] = []string{req.ContentType}
 	}
 
 	if opts.SavePath != "" {
