@@ -7,7 +7,7 @@ import (
 )
 
 type PayloadResolver interface {
-	Resolve(data, dataFile string, dataStdin, edit bool) ([]byte, error)
+	Resolve(data string, dataFile string, dataStdin bool, edit bool) (string, error)
 }
 
 type PayloadResolverImpl struct{}
