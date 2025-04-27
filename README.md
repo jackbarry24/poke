@@ -68,7 +68,12 @@ poke send myreq.json
 
 Other features of note:
 - Env templating: In any request json file you can use `{{ env.VAR }}` to fill in a secret/variable from env or a .env file.
-- History templating: In any request json file you can use `{{ latest.Headers["Content-Length"] }}` for example. This allows you to chain responses together when running a collection. If you need to force the files to run in a certain order for the chaining to work simply name them `1_getuser.json`, `2_updateuser.json` and so on.
+- History templating: In any request json file you can do stuff like the following:  
+
+`{{ history.body }}` to put the body of the response from the last request in your current request.  
+`{{ index history.headers "Content-Length" 0 }}`   
+
+. This allows you to chain responses together when running a collection. If you need to force the files to run in a certain order for the chaining to work simply name them `1_getuser.json`, `2_updateuser.json` and so on.
 - Assertions: In each request json you can manually add status, body, and header assertions (status will be populated from `--expect-status`). This will cause the request to fail if the status doesn't match, etc.
 
 

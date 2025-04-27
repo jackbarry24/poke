@@ -26,12 +26,11 @@ type TemplateEngine interface {
 }
 
 type TemplateEngineImpl struct {
-	env     map[string]string
-	history map[string]any
+	ctx TemplateContext
 }
 
 func (t *TemplateEngineImpl) LoadEnv() {
-	if t.env != nil {
+	if t.ctx.Env != nil {
 		return
 	}
 	envMap, err := godotenv.Read(".env")
@@ -45,7 +44,7 @@ func (t *TemplateEngineImpl) LoadEnv() {
 			envMap[string(parts[0])] = string(parts[1])
 		}
 	}
-	t.env = envMap
+	t.ctx.Env = envMap
 }
 func (t *TemplateEngineImpl) LoadHistory() error {
 	homeDir, err := os.UserHomeDir()
@@ -58,7 +57,7 @@ func (t *TemplateEngineImpl) LoadHistory() error {
 		return nil
 	}
 
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
@@ -70,7 +69,7 @@ func (t *TemplateEngineImpl) LoadHistory() error {
 		}
 	}
 
-	t.history = raw
+	t.ctx.History = raw
 	return nil
 }
 
@@ -82,16 +81,23 @@ func (t *TemplateEngineImpl) RenderRequest(data []byte) (*types.PokeRequest, err
 
 	tmpl, err := template.New("poke").
 		Funcs(sprig.TxtFuncMap()).
+		Funcs(template.FuncMap{
+			// env: returns the environment map for property-style lookup, e.g., {{ env.TOKEN }}
+			"env": func() map[string]string {
+				return t.ctx.Env
+			},
+			// history: returns the history map for property-style lookup, e.g., {{ history.body }} or nested {{ history.body.data }}
+			"history": func() any {
+				return t.ctx.History
+			},
+		}).
 		Parse(string(data))
 	if err != nil {
 		return nil, fmt.Errorf("template parse: %w", err)
 	}
 
 	var buf bytes.Buffer
-	err = tmpl.Execute(&buf, TemplateContext{
-		Env:     t.env,
-		History: t.history,
-	})
+	err = tmpl.Execute(&buf, t.ctx)
 	if err != nil {
 		return nil, fmt.Errorf("template exec: %w", err)
 	}
