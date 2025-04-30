@@ -213,9 +213,9 @@ func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, e
 
 // SaveRequest writes a PokeRequest to path, clearing Body if BodyFile is set.
 func (r *RequestRunnerImpl) SaveRequest(req *types.PokeRequest, path string) error {
-	if req.BodyFile != "" {
-		req.Body = ""
-	}
+	// if req.BodyFile != "" {
+	// 	req.Body = ""
+	// }
 	out, err := json.MarshalIndent(req, "", "  ")
 	if err != nil {
 		return err
@@ -264,7 +264,7 @@ func (r *RequestRunnerImpl) Collect(path string) error {
 			fmt.Printf("File '%s' is not a valid request: %v\n", p, err)
 			continue
 		}
-		body, err := r.Pyld.Resolve(string(req.Body), req.BodyFile, false, false)
+		body, _, err := r.Pyld.Resolve(string(req.Body), req.BodyFile, false, false)
 		if err != nil {
 			fmt.Printf("Failed to resolve body for '%s': %v\n", p, err)
 			continue
@@ -287,7 +287,7 @@ func (r *RequestRunnerImpl) Load(fpath string) (*types.PokeRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	if req.BodyFile != "" {
+	if req.BodyFile != "" && req.Body == "" {
 		content, err := os.ReadFile(req.BodyFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read body file: %w", err)

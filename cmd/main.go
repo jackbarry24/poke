@@ -43,7 +43,7 @@ func main() {
 		util.Error("Failed to parse URL: %v", err)
 	}
 
-	payload, err := runner.Pyld.Resolve(opts.Data, opts.DataFile, opts.DataStdin, opts.Editor)
+	payload, fromFile, err := runner.Pyld.Resolve(opts.Data, opts.DataFile, opts.DataStdin, opts.Editor)
 	if err != nil {
 		payload = opts.Data
 		util.Warn("Failed to resolve payload...request body may not be as expected: %v", err)
@@ -81,6 +81,9 @@ func main() {
 	}
 
 	if opts.SavePath != "" {
+		if fromFile {
+			req.Body = ""
+		}
 		if err := runner.SaveRequest(req, opts.SavePath); err != nil {
 			util.Warn("Failed to save request: %v", err)
 		}
