@@ -47,21 +47,15 @@ func (r *RequestRunnerImpl) Execute(req *types.PokeRequest) error {
 		return nil
 	}
 
-	if req.Workers < 1 {
-		req.Workers = 1
-	}
-	if req.Workers > req.Repeat {
-		req.Workers = req.Repeat
-	}
+	req.Workers = max(req.Workers, 1)
+	req.Workers = min(req.Workers, req.Repeat)
 
 	results, totalTime := r.dispatch(req)
 
 	if req.Repeat <= 1 {
 		if len(results) == 1 {
 			res := results[0]
-			if res.Err != nil || !res.Ok {
-				util.Warn("Request failed: %v", res.Err)
-			}
+
 			_ = r.SaveResponse(res.Resp)
 			if res.Ok {
 				if r.Opts.Verbose {
@@ -73,6 +67,10 @@ func (r *RequestRunnerImpl) Execute(req *types.PokeRequest) error {
 						util.Info("%s", util.ColorStatus(res.Resp.StatusCode))
 					}
 				}
+			}
+
+			if res.Err != nil || !res.Ok {
+				util.Error("Request failed: %v", res.Err)
 			}
 		}
 		return nil
@@ -119,8 +117,10 @@ func (r *RequestRunnerImpl) sendWithRetries(req *types.PokeRequest) (*types.Poke
 		}
 		backoff := util.Backoff(base, max, i)
 		if r.Opts.Verbose && req.Retries > 1 {
-			util.Info("Attempt %d failed", i+1)
-			util.Info("Retrying... backoff %.3fs", backoff.Seconds())
+			util.Info("Attempt %d failed: %v", i+1, err)
+			if i < req.Retries-1 {
+				util.Info("Retrying...backoff %.3fs", backoff.Seconds())
+			}
 		}
 		if i < req.Retries-1 {
 			time.Sleep(backoff)
@@ -141,7 +141,7 @@ func (r *RequestRunnerImpl) dispatch(req *types.PokeRequest) ([]execResult, time
 	results := make(chan execResult, count)
 	var wg sync.WaitGroup
 	start := time.Now()
-	for w := 0; w < req.Workers; w++ {
+	for range req.Workers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -213,9 +213,6 @@ func (r *RequestRunnerImpl) Send(req *types.PokeRequest) (*types.PokeResponse, e
 
 // SaveRequest writes a PokeRequest to path, clearing Body if BodyFile is set.
 func (r *RequestRunnerImpl) SaveRequest(req *types.PokeRequest, path string) error {
-	// if req.BodyFile != "" {
-	// 	req.Body = ""
-	// }
 	out, err := json.MarshalIndent(req, "", "  ")
 	if err != nil {
 		return err

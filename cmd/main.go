@@ -80,6 +80,10 @@ func main() {
 		req.Headers["Content-Type"] = []string{req.ContentType}
 	}
 
+	if err := runner.Execute(req); err != nil {
+		util.Error("Failed to execute request: %v", err)
+	}
+
 	if opts.SavePath != "" {
 		if fromFile {
 			req.Body = ""
@@ -90,10 +94,6 @@ func main() {
 		if opts.Verbose {
 			util.Info("Request saved to: %s", opts.SavePath)
 		}
-	}
-
-	if err := runner.Execute(req); err != nil {
-		util.Error("Failed to execute request: %v", err)
 	}
 }
 

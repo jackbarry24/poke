@@ -136,8 +136,8 @@ func ParseHeaders(headerStr string) map[string][]string {
 		return headers
 	}
 
-	pairs := strings.Split(headerStr, ";")
-	for _, pair := range pairs {
+	pairs := strings.SplitSeq(headerStr, ";")
+	for pair := range pairs {
 		kv := strings.SplitN(pair, ":", 2)
 		if len(kv) == 2 {
 			key := strings.TrimSpace(kv[0])
@@ -229,10 +229,7 @@ func DumpRequest(req *types.PokeRequest) {
 }
 
 func Backoff(base, max time.Duration, attempt int) time.Duration {
-	backoff := base * (1 << attempt)
-	if backoff > max {
-		backoff = max
-	}
+	backoff := min(base*(1<<attempt), max)
 
 	jitter := time.Duration(rand.Int63n(int64(backoff)))
 	return backoff + jitter
